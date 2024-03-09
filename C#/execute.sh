@@ -1,0 +1,1 @@
+dotnet build --disable-build-servers && dotnet run --disable-build-servers

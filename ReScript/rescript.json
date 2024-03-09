@@ -1,0 +1,22 @@
+{
+    "name": "example",
+    "sources": [
+        {
+            "dir": "src"
+        }
+    ],
+    "package-specs": [
+        {
+            "module": "es6",
+            "in-source": true
+        }
+    ],
+    "suffix": ".res.mjs",
+    "bs-dependencies": [
+        "@rescript/core",
+        "rescript-nodejs"
+    ],
+    "bsc-flags": [
+        "-open RescriptCore"
+    ]
+}

@@ -1,0 +1,1 @@
+pnpm install && ./node_modules/.bin/elm-cli run src/Example.elm
