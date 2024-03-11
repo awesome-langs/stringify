@@ -3,24 +3,24 @@
 
 (struct PolyEvalType [type-str type-name value-type key-type])
 
-(define (__new-poly-eval-type type-str type-name value-type key-type)
+(define (new-poly-eval-type__ type-str type-name value-type key-type)
     (PolyEvalType type-str type-name value-type key-type))
 
-(define (__s-to-type type-str)
+(define (s-to-type__ type-str)
     (if (not (regexp-match? #rx"<" type-str))
-        (__new-poly-eval-type type-str type-str #f #f)
+        (new-poly-eval-type__ type-str type-str #f #f)
         (letrec ([idx (string-contains type-str "<")]
               [type-name (substring type-str 0 idx)]
               [other-str (substring type-str (+ idx 1) (- (string-length type-str) 1))])
             (if (not (regexp-match? #rx"," other-str))
-                (let ([value-type (__s-to-type other-str)])
-                    (__new-poly-eval-type type-str type-name value-type #f))
+                (let ([value-type (s-to-type__ other-str)])
+                    (new-poly-eval-type__ type-str type-name value-type #f))
                 (letrec ([idx (string-contains other-str ",")]
-                      [key-type (__s-to-type (substring other-str 0 idx))]
-                      [value-type (__s-to-type (substring other-str (+ idx 1)))])
-                    (__new-poly-eval-type type-str type-name value-type key-type))))))
+                      [key-type (s-to-type__ (substring other-str 0 idx))]
+                      [value-type (s-to-type__ (substring other-str (+ idx 1)))])
+                    (new-poly-eval-type__ type-str type-name value-type key-type))))))
 
-(define (__escape-string s)
+(define (escape-string__ s)
     (let ([new-s (map (lambda (c)
                          (cond
                              [(char=? c #\\) "\\\\"]
@@ -32,13 +32,13 @@
                       (string->list s))])
         (apply string-append new-s)))
 
-(define (__by-bool value)
+(define (by-bool__ value)
     (if value "true" "false"))
 
-(define (__by-int value)
+(define (by-int__ value)
     (number->string (exact-round value)))
 
-(define (__by-double value)
+(define (by-double__ value)
     (let ([v (exact->inexact value)])
         (let ([vs (~r #:precision '(= 6) v)])
             (do ()
@@ -50,67 +50,67 @@
                     (set! vs "0.0")))
             vs)))
 
-(define (__by-string value)
-    (string-append "\"" (__escape-string value) "\""))
+(define (by-string__ value)
+    (string-append "\"" (escape-string__ value) "\""))
 
-(define (__by-list value ty)
-    (let ([v-strs (map (lambda (v) (__val-to-s v (PolyEvalType-value-type ty))) value)])
+(define (by-list__ value ty)
+    (let ([v-strs (map (lambda (v) (val-to-s__ v (PolyEvalType-value-type ty))) value)])
         (string-append "[" (string-join v-strs ", ") "]")))
 
-(define (__by-ulist value ty)
-    (let ([v-strs (map (lambda (v) (__val-to-s v (PolyEvalType-value-type ty))) value)])
+(define (by-ulist__ value ty)
+    (let ([v-strs (map (lambda (v) (val-to-s__ v (PolyEvalType-value-type ty))) value)])
         (string-append "[" (string-join (sort v-strs string<?) ", ") "]")))
     
-(define (__by-dict value ty)
-    (let ([v-strs (hash-map value (lambda (k v) (string-append (__val-to-s k (PolyEvalType-key-type ty)) "=>" (__val-to-s v (PolyEvalType-value-type ty)))))])
+(define (by-dict__ value ty)
+    (let ([v-strs (hash-map value (lambda (k v) (string-append (val-to-s__ k (PolyEvalType-key-type ty)) "=>" (val-to-s__ v (PolyEvalType-value-type ty)))))])
         (string-append "{" (string-join (sort v-strs string<?) ", ") "}")))
 
-(define (__by-option value ty)
+(define (by-option__ value ty)
     (if (false? value)
         "null"
-        (__val-to-s value (PolyEvalType-value-type ty))))
+        (val-to-s__ value (PolyEvalType-value-type ty))))
 
-(define (__val-to-s value ty)
+(define (val-to-s__ value ty)
     (let ([type-name (PolyEvalType-type-name ty)])
         (cond
             [(string=? type-name "bool") (if (not (boolean? value))
                                             (error 'type-mismatch "Type mismatch")
-                                            (__by-bool value))]
+                                            (by-bool__ value))]
             [(string=? type-name "int") (if (not (integer? value))
                                             (error 'type-mismatch "Type mismatch")
-                                            (__by-int value))]
+                                            (by-int__ value))]
             [(string=? type-name "double") (if (not (real? value))
                                                 (error 'type-mismatch "Type mismatch")
-                                                (__by-double value))]
+                                                (by-double__ value))]
             [(string=? type-name "str") (if (not (string? value))
                                             (error 'type-mismatch "Type mismatch")
-                                            (__by-string value))]
+                                            (by-string__ value))]
             [(string=? type-name "list") (if (not (list? value))
                                             (error 'type-mismatch "Type mismatch")
-                                            (__by-list value ty))]
+                                            (by-list__ value ty))]
             [(string=? type-name "ulist") (if (not (list? value))
                                             (error 'type-mismatch "Type mismatch")
-                                            (__by-ulist value ty))]
+                                            (by-ulist__ value ty))]
             [(string=? type-name "dict") (if (not (hash? value))
                                             (error 'type-mismatch "Type mismatch")
-                                            (__by-dict value ty))]
-            [(string=? type-name "option") (__by-option value ty)]
+                                            (by-dict__ value ty))]
+            [(string=? type-name "option") (by-option__ value ty)]
             [else (error 'type-mismatch (string-append "Unknown type " type-name))])))
 
-(define (__stringify value type-str)
-    (string-append (__val-to-s value (__s-to-type type-str)) ":" type-str))
+(define (stringify__ value type-str)
+    (string-append (val-to-s__ value (s-to-type__ type-str)) ":" type-str))
 
-(define tfs (string-append (__stringify #t "bool") "\n"
-            (__stringify 3 "int") "\n"
-            (__stringify 3.141592653 "double") "\n"
-            (__stringify 3.0 "double") "\n"
-            (__stringify "Hello, World!" "str") "\n"
-            (__stringify "!@#$%^&*()\\\"\n\t" "str") "\n"
-            (__stringify '(1 2 3) "list<int>") "\n"
-            (__stringify '(#t #f #t) "list<bool>") "\n"
-            (__stringify '(3 2 1) "ulist<int>") "\n"
-            (__stringify #hash((1 . "one") (2 . "two")) "dict<int,str>") "\n"
-            (__stringify #hash(("one" . (1 2 3)) ("two" . (4 5 6))) "dict<str,list<int>>") "\n"
-            (__stringify #f "option<int>") "\n"
-            (__stringify 3 "option<int>") "\n"))
+(define tfs (string-append (stringify__ #t "bool") "\n"
+            (stringify__ 3 "int") "\n"
+            (stringify__ 3.141592653 "double") "\n"
+            (stringify__ 3.0 "double") "\n"
+            (stringify__ "Hello, World!" "str") "\n"
+            (stringify__ "!@#$%^&*()\\\"\n\t" "str") "\n"
+            (stringify__ '(1 2 3) "list<int>") "\n"
+            (stringify__ '(#t #f #t) "list<bool>") "\n"
+            (stringify__ '(3 2 1) "ulist<int>") "\n"
+            (stringify__ #hash((1 . "one") (2 . "two")) "dict<int,str>") "\n"
+            (stringify__ #hash(("one" . (1 2 3)) ("two" . (4 5 6))) "dict<str,list<int>>") "\n"
+            (stringify__ #f "option<int>") "\n"
+            (stringify__ 3 "option<int>") "\n"))
 (call-with-output-file "stringify.out" (lambda (out) (display tfs out)) #:exists 'replace)

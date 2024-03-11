@@ -5,7 +5,7 @@ class PolyEvalType
         @valueType = valueType
         @keyType = keyType
 
-__sToType = (typeStr) ->
+sToType__ = (typeStr) ->
     if !typeStr.includes "<"
         return new PolyEvalType typeStr, typeStr, null, null
     else
@@ -13,15 +13,15 @@ __sToType = (typeStr) ->
         typeName = typeStr.substring 0, idx
         otherStr = typeStr.substring idx + 1, typeStr.length - 1
         if !otherStr.includes ","
-            valueType = __sToType otherStr
+            valueType = sToType__ otherStr
             return new PolyEvalType typeStr, typeName, valueType, null
         else
             idx = otherStr.indexOf ","
-            keyType = __sToType otherStr.substring 0, idx
-            valueType = __sToType otherStr.substring idx + 1
+            keyType = sToType__ otherStr.substring 0, idx
+            valueType = sToType__ otherStr.substring idx + 1
             return new PolyEvalType typeStr, typeName, valueType, keyType
 
-__escapeString = (s) ->
+escapeString__ = (s) ->
     newS = []
     for c in s
         switch c
@@ -33,14 +33,14 @@ __escapeString = (s) ->
             else newS.push c
     return newS.join ""
 
-__byBool = (value) ->
+byBool__ = (value) ->
     return if value then "true" else "false"
 
-__byInt = (value) ->
+byInt__ = (value) ->
     v = parseInt value
     return v.toString()
 
-__byDouble = (value) ->
+byDouble__ = (value) ->
     v = parseFloat value
     vs = v.toFixed 6
     while vs.endsWith "0"
@@ -51,76 +51,76 @@ __byDouble = (value) ->
         vs = "0.0"
     return vs
 
-__byString = (value) ->
-    return '"' + __escapeString(value) + '"'
+byString__ = (value) ->
+    return '"' + escapeString__(value) + '"'
 
-__byList = (value, ty) ->
-    vStrs = value.map (v) -> __valToS v, ty.valueType
+byList__ = (value, ty) ->
+    vStrs = value.map (v) -> valToS__ v, ty.valueType
     return "[" + vStrs.join(", ") + "]"
 
-__byUlist = (value, ty) ->
-    vStrs = value.map (v) -> __valToS v, ty.valueType
+byUlist__ = (value, ty) ->
+    vStrs = value.map (v) -> valToS__ v, ty.valueType
     return "[" + vStrs.sort().join(", ") + "]"
 
-__byDict = (value, ty) ->
-    vStrs = [value...].map ([key, val]) -> __valToS(key, ty.keyType) + "=>" + __valToS(val, ty.valueType)
+byDict__ = (value, ty) ->
+    vStrs = [value...].map ([key, val]) -> valToS__(key, ty.keyType) + "=>" + valToS__(val, ty.valueType)
     return "{" + vStrs.sort().join(", ") + "}"
 
-__byOption = (value, ty) ->
+byOption__ = (value, ty) ->
     if value is null
         return "null"
     else
-        return __valToS value, ty.valueType
+        return valToS__ value, ty.valueType
 
-__valToS = (value, ty) ->
+valToS__ = (value, ty) ->
     typeName = ty.typeName
     if typeName is "bool"
         if typeof value isnt "boolean"
             throw new Error "Type mismatch"
-        return __byBool value
+        return byBool__ value
     else if typeName is "int"
         if typeof value isnt "number" and !Number.isInteger value
             throw new Error "Type mismatch"
-        return __byInt value
+        return byInt__ value
     else if typeName is "double"
         if typeof value isnt "number"
             throw new Error "Type mismatch"
-        return __byDouble value
+        return byDouble__ value
     else if typeName is "str"
         if typeof value isnt "string"
             throw new Error "Type mismatch"
-        return __byString value
+        return byString__ value
     else if typeName is "list"
         if !Array.isArray value
             throw new Error "Type mismatch"
-        return __byList value, ty
+        return byList__ value, ty
     else if typeName is "ulist"
         if !Array.isArray value
             throw new Error "Type mismatch"
-        return __byUlist value, ty
+        return byUlist__ value, ty
     else if typeName is "dict"
         if !(value instanceof Map)
             throw new Error "Type mismatch"
-        return __byDict value, ty
+        return byDict__ value, ty
     else if typeName is "option"
-        return __byOption value, ty
+        return byOption__ value, ty
     throw new Error "Unknown type #{typeName}"
 
-__stringify = (value, typeStr) ->
-    return __valToS(value, __sToType(typeStr)) + ":" + typeStr
+stringify__ = (value, typeStr) ->
+    return valToS__(value, sToType__(typeStr)) + ":" + typeStr
 
-tfs = __stringify(true, "bool") + "\n" \
-    + __stringify(3, "int") + "\n" \
-    + __stringify(3.141592653, "double") + "\n" \
-    + __stringify(3.0, "double") + "\n" \
-    + __stringify("Hello, World!", "str") + "\n" \
-    + __stringify("!@#$%^&*()\\\"\n\t", "str") + "\n" \
-    + __stringify([1, 2, 3], "list<int>") + "\n" \
-    + __stringify([true, false, true], "list<bool>") + "\n" \
-    + __stringify([3, 2, 1], "ulist<int>") + "\n" \
-    + __stringify(new Map([[1, "one"], [2, "two"]]), "dict<int,str>") + "\n" \
-    + __stringify(new Map([["one", [1, 2, 3]], ["two", [4, 5, 6]]]), "dict<str,list<int>>") + "\n" \
-    + __stringify(null, "option<int>") + "\n" \
-    + __stringify(3, "option<int>") + "\n"
+tfs = stringify__(true, "bool") + "\n" \
+    + stringify__(3, "int") + "\n" \
+    + stringify__(3.141592653, "double") + "\n" \
+    + stringify__(3.0, "double") + "\n" \
+    + stringify__("Hello, World!", "str") + "\n" \
+    + stringify__("!@#$%^&*()\\\"\n\t", "str") + "\n" \
+    + stringify__([1, 2, 3], "list<int>") + "\n" \
+    + stringify__([true, false, true], "list<bool>") + "\n" \
+    + stringify__([3, 2, 1], "ulist<int>") + "\n" \
+    + stringify__(new Map([[1, "one"], [2, "two"]]), "dict<int,str>") + "\n" \
+    + stringify__(new Map([["one", [1, 2, 3]], ["two", [4, 5, 6]]]), "dict<str,list<int>>") + "\n" \
+    + stringify__(null, "option<int>") + "\n" \
+    + stringify__(3, "option<int>") + "\n"
 fs = require "fs"
 fs.writeFileSync "stringify.out", tfs
