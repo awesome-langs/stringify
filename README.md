@@ -5,8 +5,7 @@ Programs with stringify functionality written in popular programming languages
 
 | Language | Originated in | Current Release |
 |----------|----------|----------|
-| C++ | 1980 |
-| Common Lisp | 1984 |
+| C++ | 1983 |
 | Erlang | 1986 |
 | Perl | 1987 |
 | Haskell | 1990 |

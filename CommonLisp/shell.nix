@@ -5,7 +5,7 @@ in
 pkgs.mkShell {
   packages = [ 
     (pkgs.sbcl.withPackages (
-      ps: with ps; [ parse-float alexandria ]
+      ps: with ps; [ alexandria ]
     )) 
   ];
 }

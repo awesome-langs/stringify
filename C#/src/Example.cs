@@ -67,15 +67,6 @@ class Example {
     }
 
     public static string __ByDouble(double value) {
-        if (double.IsNaN(value)) {
-            return "nan";
-        } else if (double.IsInfinity(value)) {
-            if (value > 0) {
-                return "inf";
-            } else {
-                return "-inf";
-            }
-        }
         string vs = value.ToString("F6");
         while (vs.EndsWith("0")) {
             vs = vs.Substring(0, vs.Length - 1);
@@ -93,10 +84,10 @@ class Example {
         return "\"" + __EscapeString(value) + "\"";
     }
 
-    public static string __ByList(IList<object> value, PolyEvalType t) {
+    public static string __ByList(IList<object> value, PolyEvalType ty) {
         List<string> vStrs = new List<string>();
         foreach (object v in value) {
-            vStrs.Add(__ValToS(v, t.valueType));
+            vStrs.Add(__ValToS(v, ty.valueType));
         }
         StringBuilder ret = new StringBuilder();
         ret.Append("[");
@@ -110,10 +101,10 @@ class Example {
         return ret.ToString();
     }
 
-    public static string __ByUlist(IList<object> value, PolyEvalType t) {
+    public static string __ByUlist(IList<object> value, PolyEvalType ty) {
         List<string> vStrs = new List<string>();
         foreach (object v in value) {
-            vStrs.Add(__ValToS(v, t.valueType));
+            vStrs.Add(__ValToS(v, ty.valueType));
         }
         vStrs.Sort();
         StringBuilder ret = new StringBuilder();
@@ -128,10 +119,10 @@ class Example {
         return ret.ToString();
     }
 
-    public static string __ByDict(IDictionary<object, object> value, PolyEvalType t) {
+    public static string __ByDict(IDictionary<object, object> value, PolyEvalType ty) {
         List<string> vStrs = new List<string>();
         foreach (KeyValuePair<object, object> kv in value) {
-            vStrs.Add(__ValToS(kv.Key, t.keyType) + "=>" + __ValToS(kv.Value, t.valueType));
+            vStrs.Add(__ValToS(kv.Key, ty.keyType) + "=>" + __ValToS(kv.Value, ty.valueType));
         }
         vStrs.Sort();
         StringBuilder ret = new StringBuilder();
@@ -146,16 +137,16 @@ class Example {
         return ret.ToString();
     }
 
-    public static string __ByOption(object value, PolyEvalType t) {
+    public static string __ByOption(object value, PolyEvalType ty) {
         if (value == null) {
             return "null";
         } else {
-            return __ValToS(value, t.valueType);
+            return __ValToS(value, ty.valueType);
         }
     }
 
-    public static string __ValToS(object value, PolyEvalType t) {
-        string typeName = t.typeName;
+    public static string __ValToS(object value, PolyEvalType ty) {
+        string typeName = ty.typeName;
         if (typeName == "bool") {
             if (!(value is bool)) {
                 throw new Exception("Type mismatch");
@@ -184,7 +175,7 @@ class Example {
             foreach (object v in (IList) value) {
                 listValue.Add(v);
             }
-            return __ByList(listValue, t);
+            return __ByList(listValue, ty);
         } else if (typeName == "ulist") {
             if (!(value is IList)) {
                 throw new Exception("Type mismatch");
@@ -193,7 +184,7 @@ class Example {
             foreach (object v in (IList) value) {
                 listValue.Add(v);
             }
-            return __ByUlist(listValue, t);
+            return __ByUlist(listValue, ty);
         } else if (typeName == "dict") {
             if(!(value is IDictionary)) {
                 throw new Exception("Type mismatch");
@@ -202,9 +193,9 @@ class Example {
             foreach (DictionaryEntry kv in (IDictionary) value) {
                 dictValue[kv.Key] = kv.Value;
             }
-            return __ByDict(dictValue, t);
+            return __ByDict(dictValue, ty);
         } else if (typeName == "option") {
-            return __ByOption(value, t);
+            return __ByOption(value, ty);
         }
         throw new Exception($"Unknown type {typeName}");
     }
@@ -214,17 +205,19 @@ class Example {
     }
     
     public static void Main() {
-        string tfs = __Stringify(true, "bool") + "\n";
-        tfs += __Stringify(3, "int") + "\n";
-        tfs += __Stringify(3.141592653, "double") + "\n";
-        tfs += __Stringify("Hello, World!", "str") + "\n";
-        tfs += __Stringify(new List<int> {1, 2, 3}, "list<int>") + "\n";
-        tfs += __Stringify(new List<bool> {true, false, true}, "list<bool>") + "\n";
-        tfs += __Stringify(new List<int> {3, 2, 1}, "ulist<int>") + "\n";
-        tfs += __Stringify(new Dictionary<int, string> {{1, "one"}, {2, "two"}}, "dict<int,str>") + "\n";
-        tfs += __Stringify(new Dictionary<string, List<int>> {{"one", new List<int> {1, 2, 3}}, {"two", new List<int> {4, 5, 6}}}, "dict<str,list<int>>") + "\n";
-        tfs += __Stringify(null, "option<int>") + "\n";
-        tfs += __Stringify(3, "option<int>") + "\n";
+        string tfs = __Stringify(true, "bool") + "\n"
+            + __Stringify(3, "int") + "\n"
+            + __Stringify(3.141592653, "double") + "\n"
+            + __Stringify(3.0, "double") + "\n"
+            + __Stringify("Hello, World!", "str") + "\n"
+            + __Stringify("!@#$%^&*()\\\"\n\t", "str") + "\n"
+            + __Stringify(new List<int> {1, 2, 3}, "list<int>") + "\n"
+            + __Stringify(new List<bool> {true, false, true}, "list<bool>") + "\n"
+            + __Stringify(new List<int> {3, 2, 1}, "ulist<int>") + "\n"
+            + __Stringify(new Dictionary<int, string> {{1, "one"}, {2, "two"}}, "dict<int,str>") + "\n"
+            + __Stringify(new Dictionary<string, List<int>> {{"one", new List<int> {1, 2, 3}}, {"two", new List<int> {4, 5, 6}}}, "dict<str,list<int>>") + "\n"
+            + __Stringify(null, "option<int>") + "\n"
+            + __Stringify(3, "option<int>") + "\n";
         System.IO.File.WriteAllText("stringify.out", tfs);
     }
 }

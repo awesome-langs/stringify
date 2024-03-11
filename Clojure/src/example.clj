@@ -1,79 +1,144 @@
-(defn my-string-to-int [s] 
-    (parse-long s))
+(require '[clojure.string :as string])  
 
-(defn my-string-to-double [s]
-    (parse-double s))
+(defrecord PolyEvalType [type-str type-name value-type key-type])
 
-(defn my-int-to-string [i]
-    (str i))
+(defn __new-poly-eval-type [type-str type-name value-type key-type]
+  (PolyEvalType. type-str type-name value-type key-type))
 
-(defn my-double-to-string [d]
-    (format "%.6f" d))
+(declare __s-to-type)
+(declare __val-to-s)
+(declare __stringify)
 
-(defn my-bool-to-string [b]
-    (if b "true" "false"))
+(defn __s-to-type [type-str]
+    (if (not (re-find #"<" type-str))
+        (__new-poly-eval-type type-str type-str nil nil)
+        (let [idx (.indexOf type-str "<")
+            type-name (subs type-str 0 idx)
+            other-str (subs type-str (inc idx) (- (count type-str) 1))]
+        (if (not (re-find #"," other-str))
+            (let [value-type (__s-to-type other-str)]
+            (__new-poly-eval-type type-str type-name value-type nil))
+            (let [idx (.indexOf other-str ",")
+                key-type (__s-to-type (subs other-str 0 idx))
+                value-type (__s-to-type (subs other-str (inc idx)))]
+            (__new-poly-eval-type type-str type-name value-type key-type))))))
 
-(defn my-int-to-nullable [i]
-    (if (> i 0) i
-        (if (< i 0) (- i)
-            nil)))
+(defn __escape-string [s]
+    (let [new-s (atom [])]
+    (doseq [c s]
+        (cond
+            (= c \\) (swap! new-s conj "\\\\")
+            (= c \") (swap! new-s conj "\\\"")
+            (= c \newline) (swap! new-s conj "\\n")
+            (= c \tab) (swap! new-s conj "\\t")
+            (= c \return) (swap! new-s conj "\\r")
+            :else (swap! new-s conj c)))
+    (apply str @new-s)))
 
-(defn my-nullable-to-int [i]
-    (if (nil? i) -1 i))
+(defn __by-bool [value]
+    (if value "true" "false"))
 
-(defn my-list-sorted [lst]
-    (sort lst))
+(defn __by-int [value]
+    (str (int value)))
 
-(defn my-list-sorted-by-length [lst]
-    (sort-by count lst))
+(defn __by-double [value]
+    (let [v (double value)]
+        (let [vs (atom (format "%.6f" v))]
+            (while (string/ends-with? @vs "0")
+                (reset! vs (subs @vs 0 (- (count @vs) 1))))
+            (if (string/ends-with? @vs ".")
+                (reset! vs (str @vs "0"))
+                (if (= @vs "-0.0")
+                    (reset! vs "0.0")))
+            @vs)))
 
-(defn my-list-filter [lst]
-    (filter #(= (mod % 3) 0) lst))
+(defn __by-string [value]
+    (str "\"" (__escape-string value) "\""))
 
-(defn my-list-map [lst]
-    (map #(* % %) lst))
+(defn __by-list [value ty]
+    (let [v-strs (atom [])]
+    (doseq [v value]
+        (swap! v-strs conj (__val-to-s v (.-value-type ty))))
+    (let [ret (atom "[")]
+        (doseq [i (range (count @v-strs))]
+            (swap! ret str (nth @v-strs i))
+            (if (< i (- (count @v-strs) 1))
+                (swap! ret str ", ")))
+        (swap! ret str "]")
+        @ret)))
 
-(defn my-list-reduce [lst]
-    (reduce #(+ (* %1 10) %2) 0 lst))
+(defn __by-ulist [value ty]
+    (let [v-strs (atom [])]
+    (doseq [v value]
+        (swap! v-strs conj (__val-to-s v (.-value-type ty))))
+    (swap! v-strs sort)
+    (let [ret (atom "[")]
+        (doseq [i (range (count @v-strs))]
+            (swap! ret str (nth @v-strs i))
+            (if (< i (- (count @v-strs) 1))
+                (swap! ret str ", ")))
+        (swap! ret str "]")
+        @ret)))
+    
+(defn __by-dict [value ty]
+    (let [v-strs (atom [])]
+    (doseq [[key val] value]
+        (swap! v-strs conj (str (__val-to-s key (.-key-type ty)) "=>" (__val-to-s val (.-value-type ty)))))
+    (swap! v-strs sort)
+    (let [ret (atom "{")]
+        (doseq [i (range (count @v-strs))]
+            (swap! ret str (nth @v-strs i))
+            (if (< i (- (count @v-strs) 1))
+                (swap! ret str ", ")))
+        (swap! ret str "}")
+        @ret)))
 
-(defn my-list-operations [lst]
-    (->> lst
-        (filter (fn [x] (= (mod x 3) 0)))
-        (map (fn [x] (* x x)))
-        (reduce (fn [acc x] (+ (* acc 10) x)) 0)))
+(defn __by-option [value ty]
+    (if (nil? value)
+        "null"
+        (__val-to-s value (.-value-type ty))))
 
-(defn my-list-to-dict [lst]
-    (zipmap lst (map #(* % %) lst)))
+(defn __val-to-s [value ty]
+    (let [type-name (.-type-name ty)]
+    (cond
+        (= type-name "bool") (if (not (boolean? value))
+                                (throw (IllegalArgumentException. "Type mismatch"))
+                                (__by-bool value))
+        (= type-name "int") (if (not (int? value))
+                                (throw (IllegalArgumentException. "Type mismatch"))
+                                (__by-int value))
+        (= type-name "double") (if (not (float? value))
+                                    (throw (IllegalArgumentException. "Type mismatch"))
+                                    (__by-double value))
+        (= type-name "str") (if (not (string? value))
+                                (throw (IllegalArgumentException. "Type mismatch"))
+                                (__by-string value))
+        (= type-name "list") (if (not (vector? value))
+                                (throw (IllegalArgumentException. "Type mismatch"))
+                                (__by-list value ty))
+        (= type-name "ulist") (if (not (vector? value))
+                                (throw (IllegalArgumentException. "Type mismatch"))
+                                (__by-ulist value ty))
+        (= type-name "dict") (if (not (map? value))
+                                (throw (IllegalArgumentException. "Type mismatch"))
+                                (__by-dict value ty))
+        (= type-name "option") (__by-option value ty)
+        :else (throw (IllegalArgumentException. (str "Unknown type " type-name))))))
+    
+(defn __stringify [value type-str]
+    (str (__val-to-s value (__s-to-type type-str)) ":" type-str))
 
-(defn my-dict-to-list [dict]
-    (map (fn [[k v]] (+ k v)) (sort dict)))
-
-(defn my-print-string [s]
-    (println s))
-
-(defn my-print-string-list [lst]
-    (doseq [x lst]
-        (print (str x " ")))
-    (println))
-
-(defn my-print-int-list [lst]
-    (my-print-string-list (map my-int-to-string lst)))
-
-(defn my-print-dict [dict]
-    (doseq [[k v] dict]
-        (print (str (my-int-to-string k) "->" (my-int-to-string v) " ")))
-    (println))
-
-(my-print-string "Hello, World!")
-(my-print-string (my-int-to-string (my-string-to-int "123")))
-(my-print-string (my-double-to-string (my-string-to-double "123.456")))
-(my-print-string (my-bool-to-string false))
-(my-print-string (my-int-to-string (my-nullable-to-int (my-int-to-nullable 18))))
-(my-print-string (my-int-to-string (my-nullable-to-int (my-int-to-nullable -15))))
-(my-print-string (my-int-to-string (my-nullable-to-int (my-int-to-nullable 0))))
-(my-print-string-list (my-list-sorted ["e" "dddd" "ccccc" "bb" "aaa"]))
-(my-print-string-list (my-list-sorted-by-length ["e" "dddd" "ccccc" "bb" "aaa"]))
-(my-print-string (my-int-to-string (my-list-reduce (my-list-map (my-list-filter [3 12 5 8 9 15 7 17 21 11])))))
-(my-print-string (my-int-to-string (my-list-operations [3 12 5 8 9 15 7 17 21 11])))
-(my-print-dict (my-list-to-dict [3 1 4 2 5 9 8 6 7 0]))
-(my-print-int-list (my-dict-to-list {3 9, 1 1, 4 16, 2 4, 5 25, 9 81, 8 64, 6 36, 7 49, 0 0}))
+(def tfs (str (__stringify true "bool") "\n"
+            (__stringify 3 "int") "\n"
+            (__stringify 3.141592653 "double") "\n"
+            (__stringify 3.0 "double") "\n"
+            (__stringify "Hello, World!" "str") "\n"
+            (__stringify "!@#$%^&*()\\\"\n\t" "str") "\n"
+            (__stringify [1 2 3] "list<int>") "\n"
+            (__stringify [true false true] "list<bool>") "\n"
+            (__stringify [3 2 1] "ulist<int>") "\n"
+            (__stringify {1 "one" 2 "two"} "dict<int,str>") "\n"
+            (__stringify {"one" [1 2 3] "two" [4 5 6]} "dict<str,list<int>>") "\n"
+            (__stringify nil "option<int>") "\n"
+            (__stringify 3 "option<int>") "\n"))
+(spit "stringify.out" tfs)

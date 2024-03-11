@@ -64,11 +64,6 @@ public class Example {
     }
 
     public static String __byDouble(double value) {
-        if (Double.isNaN(value)) {
-            return "nan";
-        } else if (Double.isInfinite(value)) {
-            return value > 0 ? "inf" : "-inf";
-        }
         String vs = String.format("%.6f", value);
         while (vs.endsWith("0")) {
             vs = vs.substring(0, vs.length() - 1);
@@ -199,17 +194,19 @@ public class Example {
     }
 
     public static void main(String[] args) {
-        String tfs = __stringify(true, "bool") + "\n";
-        tfs += __stringify(3, "int") + "\n";
-        tfs += __stringify(3.141592653, "double") + "\n";
-        tfs += __stringify("Hello, World!", "str") + "\n";
-        tfs += __stringify(List.of(1, 2, 3), "list<int>") + "\n";
-        tfs += __stringify(List.of(true, false, true), "list<bool>") + "\n";
-        tfs += __stringify(List.of(3, 2, 1), "ulist<int>") + "\n";
-        tfs += __stringify(Map.of(1, "one", 2, "two"), "dict<int,str>") + "\n";
-        tfs += __stringify(Map.of("one", List.of(1, 2, 3), "two", List.of(4, 5, 6)), "dict<str,list<int>>") + "\n";
-        tfs += __stringify(Optional.ofNullable(null), "option<int>") + "\n";
-        tfs += __stringify(Optional.ofNullable(3), "option<int>") + "\n";
+        String tfs = __stringify(true, "bool") + "\n"
+            + __stringify(3, "int") + "\n"
+            + __stringify(3.141592653, "double") + "\n"
+            + __stringify(3.0, "double") + "\n"
+            + __stringify("Hello, World!", "str") + "\n"
+            + __stringify("!@#$%^&*()\\\"\n\t", "str") + "\n"
+            + __stringify(List.of(1, 2, 3), "list<int>") + "\n"
+            + __stringify(List.of(true, false, true), "list<bool>") + "\n"
+            + __stringify(List.of(3, 2, 1), "ulist<int>") + "\n"
+            + __stringify(Map.of(1, "one", 2, "two"), "dict<int,str>") + "\n"
+            + __stringify(Map.of("one", List.of(1, 2, 3), "two", List.of(4, 5, 6)), "dict<str,list<int>>") + "\n"
+            + __stringify(Optional.ofNullable(null), "option<int>") + "\n"
+            + __stringify(Optional.ofNullable(3), "option<int>") + "\n";
         try (FileWriter writer = new FileWriter("stringify.out")) {
             writer.write(tfs);
         } catch (IOException e) {

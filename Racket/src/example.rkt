@@ -1,84 +1,140 @@
 #lang racket
-(require racket/dict)
+(require srfi/13)
 
-(define (my-string-to-int s)
-    (string->number s))
+(struct PolyEvalType [type-str type-name value-type key-type])
 
-(define (my-string-to-double s) 
-    (string->number s))
+(define (__new-poly-eval-type type-str type-name value-type key-type)
+    (PolyEvalType type-str type-name value-type key-type))
 
-(define (my-int-to-string i)
-    (number->string i))
+(define (__s-to-type type-str)
+    (if (not (regexp-match? #rx"<" type-str))
+        (__new-poly-eval-type type-str type-str #f #f)
+        (letrec ([idx (string-contains type-str "<")]
+              [type-name (substring type-str 0 idx)]
+              [other-str (substring type-str (+ idx 1) (- (string-length type-str) 1))])
+            (if (not (regexp-match? #rx"," other-str))
+                (let ([value-type (__s-to-type other-str)])
+                    (__new-poly-eval-type type-str type-name value-type #f))
+                (letrec ([idx (string-contains other-str ",")]
+                      [key-type (__s-to-type (substring other-str 0 idx))]
+                      [value-type (__s-to-type (substring other-str (+ idx 1)))])
+                    (__new-poly-eval-type type-str type-name value-type key-type))))))
 
-(define (my-double-to-string d)
-    (~r #:precision '(= 6) d))
+(define (__escape-string s)
+    (let ([new-s ""])
+        (for ([c s])
+            (cond
+                [(char=? c #\\) (set! new-s (string-append new-s "\\\\"))]
+                [(char=? c #\") (set! new-s (string-append new-s "\\\""))]
+                [(char=? c #\newline) (set! new-s (string-append new-s "\\n"))]
+                [(char=? c #\tab) (set! new-s (string-append new-s "\\t"))]
+                [(char=? c #\return) (set! new-s (string-append new-s "\\r"))]
+                [else (set! new-s (string-append new-s (string c)))])
+        )
+        new-s))
 
-(define (my-bool-to-string b)
-    (if b "true" "false"))
+(define (__by-bool value)
+    (if value "true" "false"))
 
-(define (my-int-to-nullable i)
-    (cond
-        [(> i 0) i]
-        [(< i 0) (- i)]
-        [else #f]))
+(define (__by-int value)
+    (number->string (exact-round value)))
 
-(define (my-nullable-to-int i)
-    (if i i -1))
+(define (__by-double value)
+    (let ([v (exact->inexact value)])
+        (let ([vs (~r #:precision '(= 6) v)])
+            (do ()
+                ((not (string-suffix? "0" vs)))
+                (set! vs (substring vs 0 (- (string-length vs) 1))))
+            (if (string-suffix? "." vs)
+                (set! vs (string-append vs "0"))
+                (when (string=? vs "-0.0")
+                    (set! vs "0.0")))
+            vs)))
 
-(define (my-list-sorted lst)
-    (sort lst string<?))
+(define (__by-string value)
+    (string-append "\"" (__escape-string value) "\""))
 
-(define (my-list-sorted-by-length lst)
-    (sort lst (λ (a b) (< (string-length a) (string-length b)))))
+(define (__by-list value ty)
+    (let ([v-strs (list)])
+        (for ([v value])
+            (set! v-strs (append v-strs (list (__val-to-s v (PolyEvalType-value-type ty))))))
+        (let ([ret "["])
+            (for ([i (in-range (length v-strs))])
+                (set! ret (string-append ret (list-ref v-strs i)))
+                (when (< i (- (length v-strs) 1))
+                    (set! ret (string-append ret ", "))))
+            (string-append ret "]"))))
 
-(define (my-list-filter lst)
-    (filter (λ (x) (= (remainder x 3) 0)) lst))
+(define (__by-ulist value ty)
+    (let ([v-strs (list)])
+        (for ([v value])
+            (set! v-strs (append v-strs (list (__val-to-s v (PolyEvalType-value-type ty))))))
+        (set! v-strs (sort v-strs string<?))
+        (let ([ret "["])
+            (for ([i (in-range (length v-strs))])
+                (set! ret (string-append ret (list-ref v-strs i)))
+                (when (< i (- (length v-strs) 1))
+                    (set! ret (string-append ret ", "))))
+            (string-append ret "]"))))
 
-(define (my-list-map lst)
-    (map (λ (x) (* x x)) lst))
+(define (__by-dict value ty)
+    (let ([v-strs (list)])
+        (for ([(key val) value])
+            (set! v-strs (append v-strs (list (string-append (__val-to-s key (PolyEvalType-key-type ty)) "=>" (__val-to-s val (PolyEvalType-value-type ty)))))))
+        (set! v-strs (sort v-strs string<?))
+        (let ([ret "{"])
+            (for ([i (in-range (length v-strs))])
+                (set! ret (string-append ret (list-ref v-strs i)))
+                (when (< i (- (length v-strs) 1))
+                    (set! ret (string-append ret ", "))))
+            (string-append ret "}"))))
 
-(define (my-list-reduce lst)
-    (foldl (λ (x acc) (+ (* acc 10) x)) 0 lst))
+(define (__by-option value ty)
+    (if (false? value)
+        "null"
+        (__val-to-s value (PolyEvalType-value-type ty))))
 
-(define (my-list-operations lst)
-    (foldl (λ (x acc) (+ (* acc 10) x)) 0 
-        (map (λ (x) (* x x)) 
-            (filter (λ (x) (= (remainder x 3) 0)) lst))))
+(define (__val-to-s value ty)
+    (let ([type-name (PolyEvalType-type-name ty)])
+        (cond
+            [(string=? type-name "bool") (if (not (boolean? value))
+                                            (error 'type-mismatch "Type mismatch")
+                                            (__by-bool value))]
+            [(string=? type-name "int") (if (not (integer? value))
+                                            (error 'type-mismatch "Type mismatch")
+                                            (__by-int value))]
+            [(string=? type-name "double") (if (not (real? value))
+                                                (error 'type-mismatch "Type mismatch")
+                                                (__by-double value))]
+            [(string=? type-name "str") (if (not (string? value))
+                                            (error 'type-mismatch "Type mismatch")
+                                            (__by-string value))]
+            [(string=? type-name "list") (if (not (list? value))
+                                            (error 'type-mismatch "Type mismatch")
+                                            (__by-list value ty))]
+            [(string=? type-name "ulist") (if (not (list? value))
+                                            (error 'type-mismatch "Type mismatch")
+                                            (__by-ulist value ty))]
+            [(string=? type-name "dict") (if (not (hash? value))
+                                            (error 'type-mismatch "Type mismatch")
+                                            (__by-dict value ty))]
+            [(string=? type-name "option") (__by-option value ty)]
+            [else (error 'type-mismatch (string-append "Unknown type " type-name))])))
 
-(define (my-list-to-dict lst)
-    (make-hash (map (λ (x) (cons x (* x x))) lst)))
+(define (__stringify value type-str)
+    (string-append (__val-to-s value (__s-to-type type-str)) ":" type-str))
 
-(define (my-dict-to-list dict)
-    (map (λ (x) (+ (car x) (cdr x)))
-        (sort (dict->list dict)
-            (λ (a b) (< (car a) (car b))))))
-
-(define (my-print-string s)
-    (displayln s))
-
-(define (my-print-string-list lst)
-    (for ([x lst]) 
-        (display (string-append x " ")))
-    (displayln ""))
-
-(define (my-print-int-list lst)
-    (my-print-string-list (map my-int-to-string lst)))
-
-(define (my-print-dict dict)    
-    (for ([(k v) dict]) 
-        (display (string-append (my-int-to-string k) "->" (my-int-to-string v) " ")))
-    (displayln ""))
-
-(my-print-string "Hello, World!")
-(my-print-string (my-int-to-string (my-string-to-int "123")))
-(my-print-string (my-double-to-string (my-string-to-double "123.456")))
-(my-print-string (my-bool-to-string #f))
-(my-print-string (my-int-to-string (my-nullable-to-int (my-int-to-nullable 18))))
-(my-print-string (my-int-to-string (my-nullable-to-int (my-int-to-nullable -15))))
-(my-print-string (my-int-to-string (my-nullable-to-int (my-int-to-nullable 0))))
-(my-print-string-list (my-list-sorted '("e" "dddd" "ccccc" "bb" "aaa")))
-(my-print-string-list (my-list-sorted-by-length '("e" "dddd" "ccccc" "bb" "aaa")))
-(my-print-string (my-int-to-string (my-list-reduce (my-list-map (my-list-filter '(3 12 5 8 9 15 7 17 21 11))))))
-(my-print-string (my-int-to-string (my-list-operations '(3 12 5 8 9 15 7 17 21 11))))
-(my-print-dict (my-list-to-dict '(3 1 4 2 5 9 8 6 7 0)))
-(my-print-int-list (my-dict-to-list #hash((3 . 9) (1 . 1) (4 . 16) (2 . 4) (5 . 25) (9 . 81) (8 . 64) (6 . 36) (7 . 49) (0 . 0))))
+(define tfs (string-append (__stringify #t "bool") "\n"
+            (__stringify 3 "int") "\n"
+            (__stringify 3.141592653 "double") "\n"
+            (__stringify 3.0 "double") "\n"
+            (__stringify "Hello, World!" "str") "\n"
+            (__stringify "!@#$%^&*()\\\"\n\t" "str") "\n"
+            (__stringify '(1 2 3) "list<int>") "\n"
+            (__stringify '(#t #f #t) "list<bool>") "\n"
+            (__stringify '(3 2 1) "ulist<int>") "\n"
+            (__stringify #hash((1 . "one") (2 . "two")) "dict<int,str>") "\n"
+            (__stringify #hash(("one" . (1 2 3)) ("two" . (4 5 6))) "dict<str,list<int>>") "\n"
+            (__stringify #f "option<int>") "\n"
+            (__stringify 3 "option<int>") "\n"))
+(call-with-output-file "stringify.out" (lambda (out) (display tfs out)) #:exists 'replace)

@@ -1,83 +1,158 @@
 (load (sb-ext:posix-getenv "ASDF"))
 (asdf:load-system :alexandria)
+(defstruct poly-eval-type type-str type-name value-type key-type)
 
-(defun my-string-to-int (s)
-    (read-from-string s))
+(defun __new-poly-eval-type (type-str type-name value-type key-type)
+    (make-poly-eval-type :type-str type-str :type-name type-name :value-type value-type :key-type key-type))
 
-(defun my-string-to-double (s)
-    (read-from-string s))
+(defun __s-to-type (type-str)
+    (if (not (search "<" type-str))
+        (__new-poly-eval-type type-str type-str nil nil)
+        (let* ((idx (position #\< type-str))
+              (type-name (subseq type-str 0 idx))
+              (other-str (subseq type-str (+ 1 idx) (- (length type-str) 1))))
+            (if (not (search "," other-str))
+                (let ((value-type (__s-to-type other-str)))
+                    (__new-poly-eval-type type-str type-name value-type nil))
+                (let* ((idx (position #\, other-str))
+                      (key-type (__s-to-type (subseq other-str 0 idx)))
+                      (value-type (__s-to-type (subseq other-str (+ 1 idx)))))
+                    (__new-poly-eval-type type-str type-name value-type key-type))))))
 
-(defun my-int-to-string (i)
-    (write-to-string i))
+(defun __escape-string (s)
+    (let ((new-s ()))
+        (loop for c across s do
+            (cond ((char= c #\\) (setf new-s (append new-s (list "\\\\"))))
+                  ((char= c #\") (setf new-s (append new-s (list "\\\""))))
+                  ((char= c #\newline) (setf new-s (append new-s (list "\\n"))))
+                  ((char= c #\tab) (setf new-s (append new-s (list "\\t"))))
+                  ((char= c #\return) (setf new-s (append new-s (list "\\r"))))
+                  (t (setf new-s (append new-s (list (string c)))))))
+        (apply #'concatenate 'string new-s)))
 
-(defun my-double-to-string (d)
-    (format nil "~,6f" d))
+(defun __by-bool (value)
+    (if value "true" "false"))
 
-(defun my-bool-to-string (b)
-    (if b "true" "false"))
 
-(defun my-int-to-nullable (i)
-    (if (> i 0) i
-        (if (< i 0) (- i)
-            nil)))
+(defun __by-int (value)
+    (write-to-string (truncate value)))
 
-(defun my-nullable-to-int (i)
-    (if i i -1))
 
-(defun my-list-sorted (lst)
-    (sort lst #'string<))
+(defun __by-double (value)
+    (let ((vs (format nil "~,6f" value)))
+        (loop while (string= (subseq vs (- (length vs) 1)) "0") do
+            (setf vs (subseq vs 0 (- (length vs) 1))))
+        (if (string= (subseq vs (- (length vs) 2)) ".")
+            (setf vs (concatenate 'string vs "0"))
+            (if (string= vs "-0.0")
+                (setf vs "0.0")))
+        vs))
 
-(defun my-list-sorted-by-length (lst)
-    (sort lst #'< :key #'length))
+(defun __by-string (value)
+    (concatenate 'string "\"" (__escape-string value) "\""))
 
-(defun my-list-filter (lst)
-    (remove-if-not (lambda (x) (= (mod x 3) 0)) lst))
+(defun __by-list (value ty)
+    (let ((v-strs ()))
+        (dolist (v value)
+            (setf v-strs (append v-strs (list (__val-to-s v (slot-value ty 'value-type))))))
+        (let ((ret "["))
+            (dotimes (i (length v-strs))
+                (setf ret (concatenate 'string ret (nth i v-strs)))
+                (if (< i (- (length v-strs) 1))
+                    (setf ret (concatenate 'string ret ", "))))
+            (setf ret (concatenate 'string ret "]"))
+            ret)))
+        
 
-(defun my-list-map (lst)
-    (mapcar (lambda (x) (* x x)) lst))
+(defun __by-ulist (value ty)
+    (let ((v-strs ()))
+        (dolist (v value)
+            (setf v-strs (append v-strs (list (__val-to-s v (slot-value ty 'value-type))))))
+        (setf v-strs (sort v-strs #'string<))
+        (let ((ret "["))
+            (dotimes (i (length v-strs))
+                (setf ret (concatenate 'string ret (nth i v-strs)))
+                (if (< i (- (length v-strs) 1))
+                    (setf ret (concatenate 'string ret ", "))))
+            (setf ret (concatenate 'string ret "]"))
+            ret)))
 
-(defun my-list-reduce (lst)
-    (reduce (lambda (acc x) (+ (* acc 10) x)) lst :initial-value 0))
+(defun __by-dict (value ty)
+    (let ((v-strs ()))
+        (maphash (lambda (key val)
+            (setf v-strs (append v-strs (list (concatenate 'string (__val-to-s key (slot-value ty 'key-type)) "=>" (__val-to-s val (slot-value ty 'value-type)))))))
+            value)
+        (setf v-strs (sort v-strs #'string<))
+        (let ((ret "{"))
+            (dotimes (i (length v-strs))
+                (setf ret (concatenate 'string ret (nth i v-strs)))
+                (if (< i (- (length v-strs) 1))
+                    (setf ret (concatenate 'string ret ", "))))
+            (setf ret (concatenate 'string ret "}"))
+            ret)))
 
-(defun my-list-operations (lst)
-    (reduce (lambda (acc x) (+ (* acc 10) x))
-        (mapcar (lambda (x) (* x x))
-            (remove-if-not (lambda (x) (= (mod x 3) 0)) lst))
-        :initial-value 0))
+(defun __by-option (value ty)
+    (if (null value)
+        "null"
+        (__val-to-s value (slot-value ty 'value-type))))
 
-(defun my-list-to-dict (lst)
-    (alexandria:alist-hash-table (mapcar (lambda (x) (cons x (* x x))) lst)))
+(defun __val-to-s (value ty)
+    (let ((type-name (slot-value ty 'type-name)))
+        (cond ((string= type-name "bool") (if (not (or (eq value t) (eq value nil)))
+                                            (error "Type mismatch")
+                                            (__by-bool value)))
+              ((string= type-name "int") (if (not (integerp value))
+                                            (error "Type mismatch")
+                                            (__by-int value)))
+              ((string= type-name "double") (if (not (floatp value))
+                                            (error "Type mismatch")
+                                            (__by-double value)))
+              ((string= type-name "str") (if (not (stringp value))
+                                            (error "Type mismatch")
+                                            (__by-string value)))
+              ((string= type-name "list") (if (not (listp value))
+                                            (error "Type mismatch")
+                                            (__by-list value ty)))
+              ((string= type-name "ulist") (if (not (listp value))
+                                            (error "Type mismatch")
+                                            (__by-ulist value ty)))
+              ((string= type-name "dict") (if (not (hash-table-p value))
+                                            (error "Type mismatch")
+                                            (__by-dict value ty)))
+              ((string= type-name "option") (__by-option value ty))
+              (t (error (concatenate 'string "Unknown type " type-name))))))
 
-(defun my-dict-to-list (dict)
-    (mapcar (lambda (x) (+ (car x) (cdr x))) 
-        (sort (alexandria:hash-table-alist dict) #'< :key #'car)))
+(defun __stringify (value type-str)
+    (concatenate 'string (__val-to-s value (__s-to-type type-str)) ":" type-str))
 
-(defun my-print-string (s)
-    (format t "~a~%" s))
-
-(defun my-print-string-list (lst)
-    (dolist (x lst)
-        (format t "~a" (concatenate 'string x " ")))
-    (format t "~%"))
-
-(defun my-print-int-list (lst)
-    (my-print-string-list (mapcar #'my-int-to-string lst)))
-
-(defun my-print-dict (dict)
-    (maphash (lambda (k v)
-        (format t "~a" (concatenate 'string (my-int-to-string k) "->" (my-int-to-string v) " "))) dict)
-    (format t "~%"))
-
-(my-print-string "Hello, World!")
-(my-print-string (my-int-to-string (my-string-to-int "123")))
-(my-print-string (my-double-to-string (my-string-to-double "123.456")))
-(my-print-string (my-bool-to-string nil))
-(my-print-string (my-int-to-string (my-nullable-to-int (my-int-to-nullable 18))))
-(my-print-string (my-int-to-string (my-nullable-to-int (my-int-to-nullable -15))))
-(my-print-string (my-int-to-string (my-nullable-to-int (my-int-to-nullable 0))))
-(my-print-string-list (my-list-sorted '("e" "dddd" "ccccc" "bb" "aaa")))
-(my-print-string-list (my-list-sorted-by-length '("e" "dddd" "ccccc" "bb" "aaa")))
-(my-print-string (my-int-to-string (my-list-reduce (my-list-map (my-list-filter '(3 12 5 8 9 15 7 17 21 11))))))
-(my-print-string (my-int-to-string (my-list-operations '(3 12 5 8 9 15 7 17 21 11))))
-(my-print-dict (my-list-to-dict '(3 1 4 2 5 9 8 6 7 0)))
-(my-print-int-list (my-dict-to-list (alexandria:alist-hash-table '((3 . 9) (1 . 1) (4 . 16) (2 . 4) (5 . 25) (9 . 81) (8 . 64) (6 . 36) (7 . 49) (0 . 0)))))
+(let ((tfs (concatenate 'string 
+            (__stringify t "bool") "
+"
+            (__stringify 3 "int") "
+"
+            (__stringify 3.141592653 "double") "
+"
+            (__stringify 3.0 "double") "
+"
+            (__stringify "Hello, World!" "str") "
+"
+            (__stringify "!@#$%^&*()\\\"
+	" "str") "
+"
+            (__stringify (list 1 2 3) "list<int>") "
+"
+            (__stringify (list t nil t) "list<bool>") "
+"
+            (__stringify (list 3 2 1) "ulist<int>") "
+"
+            (__stringify (alexandria:alist-hash-table (list (cons 1 "one") (cons 2 "two"))) "dict<int,str>") "
+"
+            (__stringify (alexandria:alist-hash-table (list (cons "one" (list 1 2 3)) (cons "two" (list 4 5 6)))) "dict<str,list<int>>") "
+"
+            (__stringify nil "option<int>") "
+"
+            (__stringify 3 "option<int>") "
+"    
+            )))
+    (with-open-file (stream "stringify.out" :direction :output :if-exists :supersede)
+        (format stream tfs)))

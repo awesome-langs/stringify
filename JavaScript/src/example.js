@@ -58,15 +58,6 @@ function __byInt(value) {
 
 function __byDouble(value) {
     const v = parseFloat(value);
-    if (isNaN(v)) {
-        return "nan";
-    } else if (!isFinite(v)) {
-        if (v > 0) {
-            return "inf";
-        } else {
-            return "-inf";
-        }
-    }
     let vs = v.toFixed(6);
     while (vs.endsWith("0")) {
         vs = vs.substring(0, vs.length - 1);
@@ -189,16 +180,19 @@ function __stringify(value, typeStr) {
     return __valToS(value, __sToType(typeStr)) + ":" + typeStr;
 }
 
-let tfs = __stringify(true, "bool") + "\n";
-tfs += __stringify(3, "int") + "\n";
-tfs += __stringify(3.141592653, "double") + "\n";
-tfs += __stringify("Hello, World!", "str") + "\n";
-tfs += __stringify([1, 2, 3], "list<int>") + "\n";
-tfs += __stringify([true, false, true], "list<bool>") + "\n";
-tfs += __stringify([3, 2, 1], "ulist<int>") + "\n";
-tfs += __stringify(new Map([[1, "one"], [2, "two"]]), "dict<int,str>") + "\n";
-tfs += __stringify(new Map([["one", [1, 2, 3]], ["two", [4, 5, 6]]]), "dict<str,list<int>>") + "\n";
-tfs += __stringify(null, "option<int>") + "\n";
-tfs += __stringify(3, "option<int>") + "\n";
+let tfs = __stringify(true, "bool") + "\n"
+    + __stringify(3, "int") + "\n"
+    + __stringify(3.141592653, "double") + "\n"
+    + __stringify(3.0, "double") + "\n"
+    + __stringify("!@#$%^&*()\n\t", "str") + "\n"
+    + __stringify("Hello, World!", "str") + "\n"
+    + __stringify([1, 2, 3], "list<int>") + "\n"
+    + __stringify([1, 2, 3], "list<int>") + "\n"
+    + __stringify([true, false, true], "list<bool>") + "\n"
+    + __stringify([3, 2, 1], "ulist<int>") + "\n"
+    + __stringify(new Map([[1, "one"], [2, "two"]]), "dict<int,str>") + "\n"
+    + __stringify(new Map([["one", [1, 2, 3]], ["two", [4, 5, 6]]]), "dict<str,list<int>>") + "\n"
+    + __stringify(null, "option<int>") + "\n"
+    + __stringify(3, "option<int>") + "\n";
 const fs = require("fs");
 fs.writeFileSync("stringify.out", tfs);

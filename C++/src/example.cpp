@@ -19,14 +19,14 @@ string __by_bool(bool value);
 string __by_int(int value);
 string __by_double(double value);
 string __by_string(string value);
-template <typename T> string __by_list(const vector<T>& value, shared_ptr<PolyEvalType> t);
-template <typename T> string __by_ulist(const vector<T>& value, shared_ptr<PolyEvalType> t);
-template <typename K, typename V> string __by_dict(const map<K, V>& value, shared_ptr<PolyEvalType> t);
-template <typename T> string __by_option(optional<T> value, shared_ptr<PolyEvalType> t);
-template <typename T> string __val_to_s(T value, shared_ptr<PolyEvalType> t);
-template <typename T> string __val_to_s(const vector<T>& value, shared_ptr<PolyEvalType> t);
-template <typename K, typename V> string __val_to_s(const map<K, V>& value, shared_ptr<PolyEvalType> t);
-template <typename T> string __val_to_s(optional<T> value, shared_ptr<PolyEvalType> t);
+template <typename T> string __by_list(const vector<T>& value, shared_ptr<PolyEvalType> ty);
+template <typename T> string __by_ulist(const vector<T>& value, shared_ptr<PolyEvalType> ty);
+template <typename K, typename V> string __by_dict(const map<K, V>& value, shared_ptr<PolyEvalType> ty);
+template <typename T> string __by_option(optional<T> value, shared_ptr<PolyEvalType> ty);
+template <typename T> string __val_to_s(T value, shared_ptr<PolyEvalType> ty);
+template <typename T> string __val_to_s(const vector<T>& value, shared_ptr<PolyEvalType> ty);
+template <typename K, typename V> string __val_to_s(const map<K, V>& value, shared_ptr<PolyEvalType> ty);
+template <typename T> string __val_to_s(optional<T> value, shared_ptr<PolyEvalType> ty);
 
 class PolyEvalType {
 public:
@@ -91,12 +91,6 @@ string __by_int(int value) {
 }
 
 string __by_double(double value) {
-    if (isnan(value)) {
-        return "nan";
-    } else if (isinf(value)) {
-        return value > 0 ? "inf" : "-inf";
-    }
-    // format to 6 decimals
     string vs = format("{:.6f}", value);
     while (vs.back() == '0') {
         vs.pop_back();
@@ -115,15 +109,15 @@ string __by_string(string value) {
 }
 
 template <typename T>
-string __by_list(const vector<T>& value, shared_ptr<PolyEvalType> t) {
+string __by_list(const vector<T>& value, shared_ptr<PolyEvalType> ty) {
     vector<string> v_strs;
     if constexpr (is_same_v<T, bool>) {
         for (bool v : value) {
-            v_strs.push_back(__val_to_s((bool)v, t->value_type));
+            v_strs.push_back(__val_to_s((bool)v, ty->value_type));
         }
     } else {
         for (auto& v : value) {
-            v_strs.push_back(__val_to_s(v, t->value_type));
+            v_strs.push_back(__val_to_s(v, ty->value_type));
         }
     }
     string ret = "[";
@@ -138,15 +132,15 @@ string __by_list(const vector<T>& value, shared_ptr<PolyEvalType> t) {
 }
 
 template <typename T>
-string __by_ulist(const vector<T>& value, shared_ptr<PolyEvalType> t) {
+string __by_ulist(const vector<T>& value, shared_ptr<PolyEvalType> ty) {
     vector<string> v_strs;
     if constexpr (is_same_v<T, bool>) {
         for (bool v : value) {
-            v_strs.push_back(__val_to_s((bool)v, t->value_type));
+            v_strs.push_back(__val_to_s((bool)v, ty->value_type));
         }
     } else {
         for (auto& v : value) {
-            v_strs.push_back(__val_to_s(v, t->value_type));
+            v_strs.push_back(__val_to_s(v, ty->value_type));
         }
     }
     sort(v_strs.begin(), v_strs.end());
@@ -162,10 +156,10 @@ string __by_ulist(const vector<T>& value, shared_ptr<PolyEvalType> t) {
 }
 
 template <typename K, typename V>
-string __by_dict(const map<K, V>& value, shared_ptr<PolyEvalType> t) {
+string __by_dict(const map<K, V>& value, shared_ptr<PolyEvalType> ty) {
     vector<string> v_strs;
     for (const auto& [key, val] : value) {
-        v_strs.push_back(__val_to_s(key, t->key_type) + "=>" + __val_to_s(val, t->value_type));
+        v_strs.push_back(__val_to_s(key, ty->key_type) + "=>" + __val_to_s(val, ty->value_type));
     }
     sort(v_strs.begin(), v_strs.end());
     string ret = "{";
@@ -180,17 +174,17 @@ string __by_dict(const map<K, V>& value, shared_ptr<PolyEvalType> t) {
 }
 
 template <typename T>
-string __by_option(optional<T> value, shared_ptr<PolyEvalType> t) {
+string __by_option(optional<T> value, shared_ptr<PolyEvalType> ty) {
     if (!value.has_value()) {
         return "null";
     } else {
-        return __val_to_s(value.value(), t->value_type);
+        return __val_to_s(value.value(), ty->value_type);
     }
 }
 
 template <typename T>
-string __val_to_s(T value, shared_ptr<PolyEvalType> t) {
-    string type_name = t->type_name;
+string __val_to_s(T value, shared_ptr<PolyEvalType> ty) {
+    string type_name = ty->type_name;
     if (type_name == "bool") {
         if constexpr (is_same_v<T, bool>) {
             return __by_bool(value);
@@ -220,29 +214,29 @@ string __val_to_s(T value, shared_ptr<PolyEvalType> t) {
 }
 
 template <typename T>
-string __val_to_s(const vector<T>& value, shared_ptr<PolyEvalType> t) {
-    if (t->type_name == "list") {
-        return __by_list(value, t);
-    } else if (t->type_name == "ulist") {
-        return __by_ulist(value, t);
+string __val_to_s(const vector<T>& value, shared_ptr<PolyEvalType> ty) {
+    if (ty->type_name == "list") {
+        return __by_list(value, ty);
+    } else if (ty->type_name == "ulist") {
+        return __by_ulist(value, ty);
     }
-    throw invalid_argument("Unknown type " + t->type_name);
+    throw invalid_argument("Unknown type " + ty->type_name);
 }
 
 template <typename K, typename V>
-string __val_to_s(const map<K, V>& value, shared_ptr<PolyEvalType> t) {
-    if (t->type_name == "dict") {
-        return __by_dict(value, t);
+string __val_to_s(const map<K, V>& value, shared_ptr<PolyEvalType> ty) {
+    if (ty->type_name == "dict") {
+        return __by_dict(value, ty);
     }
-    throw invalid_argument("Unknown type " + t->type_name);
+    throw invalid_argument("Unknown type " + ty->type_name);
 }
 
 template <typename T>
-string __val_to_s(optional<T> value, shared_ptr<PolyEvalType> t) {
-    if (t->type_name == "option") {
-        return __by_option(value, t);
+string __val_to_s(optional<T> value, shared_ptr<PolyEvalType> ty) {
+    if (ty->type_name == "option") {
+        return __by_option(value, ty);
     }
-    throw invalid_argument("Unknown type " + t->type_name);
+    throw invalid_argument("Unknown type " + ty->type_name);
 }
 
 
@@ -268,17 +262,19 @@ string __stringify(optional<T> value, string type_str) {
 }
 
 int main() {
-    auto tfs = __stringify(true, "bool") + "\n";
-    tfs += __stringify(3, "int") + "\n";
-    tfs += __stringify(3.141592653, "double") + "\n";
-    tfs += __stringify(string("Hello, World!"), "str") + "\n";
-    tfs += __stringify(vector<int>{1, 2, 3}, "list<int>") + "\n";
-    tfs += __stringify(vector<bool>{true, false, true}, "list<bool>") + "\n";
-    tfs += __stringify(vector<int>{3, 2, 1}, "ulist<int>") + "\n";
-    tfs += __stringify(map<int, string>{{1, "one"}, {2, "two"}}, "dict<int,str>") + "\n";
-    tfs += __stringify(map<string, vector<int>>{{"one", {1, 2, 3}}, {"two", {4, 5, 6}}}, "dict<str,list<int>>") + "\n";
-    tfs += __stringify(optional<int>(), "option<int>") + "\n";
-    tfs += __stringify(optional<int>(3), "option<int>") + "\n";
+    string tfs = __stringify(true, "bool") + "\n"
+        + __stringify(3, "int") + "\n"
+        + __stringify(3.141592653, "double") + "\n"
+        + __stringify(3.0, "double") + "\n"
+        + __stringify(string("Hello, World!"), "str") + "\n"
+        + __stringify(string("!@#$%^&*()\\\"\n\t"), "str") + "\n"
+        + __stringify(vector<int>{1, 2, 3}, "list<int>") + "\n"
+        + __stringify(vector<bool>{true, false, true}, "list<bool>") + "\n"
+        + __stringify(vector<int>{3, 2, 1}, "ulist<int>") + "\n"
+        + __stringify(map<int, string>{{1, "one"}, {2, "two"}}, "dict<int,str>") + "\n"
+        + __stringify(map<string, vector<int>>{{"one", {1, 2, 3}}, {"two", {4, 5, 6}}}, "dict<str,list<int>>") + "\n"
+        + __stringify(optional<int>(), "option<int>") + "\n"
+        + __stringify(optional<int>(3), "option<int>") + "\n";
     ofstream f("stringify.out");
     f << tfs;
     f.close();

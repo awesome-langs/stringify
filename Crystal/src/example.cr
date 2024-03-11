@@ -1,103 +1,200 @@
-def my_string_to_int(s : String) : Int32
-    s.to_i
-end
-
-def my_string_to_double(s : String) : Float64
-    s.to_f
-end
-
-def my_int_to_string(i : Int32) : String
-    i.to_s
-end
-
-def my_double_to_string(d : Float64) : String
-    "%.6f" % d
-end
-
-def my_bool_to_string(b : Bool) : String
-    b ? "true" : "false"
-end
-
-def my_int_to_nullable(i : Int32) : Int32?
-    if i > 0
-        i
-    elsif i < 0
-        -i
-    else
-        nil
+class PolyEvalType
+    property type_str : String
+    property type_name : String
+    property value_type : PolyEvalType?
+    property key_type : PolyEvalType?
+    
+    def initialize(type_str : String, type_name : String, value_type : PolyEvalType?, key_type : PolyEvalType?)
+        @type_str = type_str
+        @type_name = type_name
+        @value_type = value_type
+        @key_type = key_type
     end
 end
 
-def my_nullable_to_int(i : Int32?) : Int32
-    i || -1
+def __s_to_type(type_str : String) : PolyEvalType
+    if !type_str.includes? "<"
+        return PolyEvalType.new(type_str, type_str, nil, nil)
+    else
+        idx = type_str.index("<").not_nil!
+        type_name = type_str[0, idx]
+        other_str = type_str[idx + 1, type_str.size - idx - 2]
+        if !other_str.includes? ","
+            value_type = __s_to_type(other_str)
+            return PolyEvalType.new(type_str, type_name, value_type, nil)
+        else
+            idx = other_str.index(",").not_nil!
+            key_type = __s_to_type(other_str[0, idx])
+            value_type = __s_to_type(other_str[idx + 1, other_str.size - idx - 1])
+            return PolyEvalType.new(type_str, type_name, value_type, key_type)
+        end
+    end
 end
 
-def my_list_sorted(lst : Array(String)) : Array(String)
-    lst.sort
+def __escape_string(s : String) : String
+    new_s = ""
+    s.each_char do |c|
+        if c == '\\'   
+            new_s += "\\\\"
+        elsif c == '"'
+            new_s += "\\\""
+        elsif c == '\n'
+            new_s += "\\n"
+        elsif c == '\t'
+            new_s += "\\t"
+        elsif c == '\r'
+            new_s += "\\r"
+        else
+            new_s += c.to_s
+        end
+    end
+    return new_s
 end
 
-def my_list_sorted_by_length(lst : Array(String)) : Array(String)
-    lst.sort_by &.size
+def __by_bool(value : Bool) : String
+    return value ? "true" : "false"
 end
 
-def my_list_filter(lst : Array(Int32)) : Array(Int32)
-    lst.select { |x| x.modulo(3) == 0 }
+def __by_int(value : Int32) : String
+    v = value.to_i
+    return v.to_s
 end
 
-def my_list_map(lst : Array(Int32)) : Array(Int32)
-    lst.map { |x| x * x }
+def __by_double(value : Float64) : String
+    v = value.to_f
+    vs = v.to_s
+    while vs.ends_with?("0")
+        vs = vs[0, vs.size - 1]
+    end
+    if vs.ends_with?(".")
+        vs += "0"
+    end
+    if vs == "-0.0"
+        vs = "0.0"
+    end
+    return vs
 end
 
-def my_list_reduce(lst : Array(Int32)) : Int32
-    lst.reduce(0) { |acc, x| acc * 10 + x }
+def __by_string(value : String) : String
+    return '"' + __escape_string(value) + '"'
 end
 
-def my_list_operations(lst : Array(Int32)) : Int32
-    lst.select { |x| x.modulo(3) == 0 }
-        .map { |x| x * x }
-        .reduce(0) { |acc, x| acc * 10 + x }
+def __by_list(value : Array(_), ty : PolyEvalType) : String
+    v_strs = [] of String
+    value.each do |v|
+        v_strs << __val_to_s(v, ty.value_type.not_nil!)
+    end
+    ret = "["
+    v_strs.each_with_index do |v, i|
+        ret += v
+        if i < v_strs.size - 1
+            ret += ", "
+        end
+    end
+    ret += "]"
+    return ret
 end
 
-def my_list_to_dict(lst : Array(Int32)) : Hash(Int32, Int32)
-    lst.map { |x| [x, x * x] }.to_h
+def __by_ulist(value : Array(_), ty : PolyEvalType) : String
+    v_strs = [] of String
+    value.each do |v|
+        v_strs << __val_to_s(v, ty.value_type.not_nil!)
+    end
+    v_strs.sort!
+    ret = "["
+    v_strs.each_with_index do |v, i|
+        ret += v
+        if i < v_strs.size - 1
+            ret += ", "
+        end
+    end
+    ret += "]"
+    return ret
 end
 
-def my_dict_to_list(dict : Hash(Int32, Int32)) : Array(Int32)
-    dict.to_a.sort_by(&.first).map { |k, v| k + v }
+def __by_dict(value : Hash(_, _), ty : PolyEvalType) : String
+    v_strs = [] of String
+    value.each do |key, val|
+        v_strs << __val_to_s(key, ty.key_type.not_nil!) + "=>" + __val_to_s(val, ty.value_type.not_nil!)
+    end
+    v_strs = v_strs.sort
+    ret = "{"
+    v_strs.each_with_index do |v, i|
+        ret += v
+        if i < v_strs.size - 1
+            ret += ", "
+        end
+    end
+    ret += "}"
+    return ret
 end
 
-def my_print_string(s : String)
-    puts s
+def __by_option(value : Nil | _, ty : PolyEvalType) : String
+    if value.nil?
+        return "null"
+    else
+        return __val_to_s(value, ty.value_type.not_nil!)
+    end
 end
 
-def my_print_string_list(lst : Array(String))
-    lst.each { |x| 
-        print x + " " 
-    }
-    puts
+def __val_to_s(value : _, ty : PolyEvalType) : String
+    type_name = ty.type_name
+    if type_name == "bool"
+        if !value.is_a?(Bool)
+            raise "Type mismatch"
+        end
+        return __by_bool(value)
+    elsif type_name == "int"
+        if !value.is_a?(Int32)
+           raise "Type mismatch" 
+        end
+        return __by_int(value)
+    elsif type_name == "double"
+        if !value.is_a?(Float64)
+            raise "Type mismatch"
+        end
+        return __by_double(value)
+    elsif type_name == "str"
+        if !value.is_a?(String)
+            raise "Type mismatch"
+        end
+        return __by_string(value)
+    elsif type_name == "list"
+        if !value.is_a?(Array)
+            raise "Type mismatch"
+        end
+        return __by_list(value, ty)
+    elsif type_name == "ulist"
+        if !value.is_a?(Array)
+            raise "Type mismatch"
+        end
+        return __by_ulist(value, ty)
+    elsif type_name == "dict"
+        if !value.is_a?(Hash)
+            raise "Type mismatch"
+        end
+        return __by_dict(value, ty)
+    elsif type_name == "option"
+        return __by_option(value, ty)
+    end
+    raise "Unknown type #{type_name}"
 end
 
-def my_print_int_list(lst : Array(Int32))
-    my_print_string_list(lst.map &.to_s)
+def __stringify(value, type_str : String) : String
+    return __val_to_s(value, __s_to_type(type_str)) + ":" + type_str
 end
 
-def my_print_dict(dict : Hash(Int32, Int32))
-    dict.each { |k, v| 
-        print my_int_to_string(k) + "->" + my_int_to_string(v) + " "
-    }
-    puts
-end
-
-my_print_string("Hello, World!")
-my_print_string(my_int_to_string(my_string_to_int "123"))
-my_print_string(my_double_to_string(my_string_to_double("123.456")))
-my_print_string(my_bool_to_string(false))
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(18))))
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(-15))))
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(0))))
-my_print_string_list(my_list_sorted(["e", "dddd", "ccccc", "bb", "aaa"]))
-my_print_string_list(my_list_sorted_by_length(["e", "dddd", "ccccc", "bb", "aaa"]))
-my_print_string(my_int_to_string(my_list_reduce(my_list_map(my_list_filter([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))))
-my_print_string(my_int_to_string(my_list_operations([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))
-my_print_dict(my_list_to_dict([3, 1, 4, 2, 5, 9, 8, 6, 7, 0]))
-my_print_int_list(my_dict_to_list({3 => 9, 1 => 1, 4 => 16, 2 => 4, 5 => 25, 9 => 81, 8 => 64, 6 => 36, 7 => 49, 0 => 0}))
+tfs = __stringify(true, "bool") + "\n" \
+    + __stringify(3, "int") + "\n" \
+    + __stringify(3.141592653, "double") + "\n" \
+    + __stringify(3.0, "double") + "\n" \
+    + __stringify("Hello, World!", "str") + "\n" \
+    + __stringify("!@#$%^&*()\\\"\n\t", "str") + "\n" \
+    + __stringify([1, 2, 3], "list<int>") + "\n" \
+    + __stringify([true, false, true], "list<bool>") + "\n" \
+    + __stringify([3, 2, 1], "ulist<int>") + "\n" \
+    + __stringify({1 => "one", 2 => "two"}, "dict<int,str>") + "\n" \
+    + __stringify({"one" => [1, 2, 3], "two" => [4, 5, 6]}, "dict<str,list<int>>") + "\n" \
+    + __stringify(nil, "option<int>") + "\n" \
+    + __stringify(3, "option<int>") + "\n"
+File.write("stringify.out", tfs)

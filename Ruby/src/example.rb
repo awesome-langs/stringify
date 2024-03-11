@@ -1,103 +1,197 @@
-def my_string_to_int(s)
-    s.to_i
+class PolyEvalType
+    attr_accessor :type_str, :type_name, :value_type, :key_type
+    
+    def initialize(type_str, type_name, value_type, key_type)
+        @type_str = type_str
+        @type_name = type_name
+        @value_type = value_type
+        @key_type = key_type
+    end
 end
 
-def my_string_to_double(s)
-    s.to_f
-end
-
-def my_int_to_string(i)
-    i.to_s
-end
-
-def my_double_to_string(d)
-    format("%.6f", d)
-end
-
-def my_bool_to_string(b)
-    b ? "true" : "false"
-end
-
-def my_int_to_nullable(i)
-    if i > 0
-        i
-    elsif i < 0
-        -i
+def __s_to_type(type_str)
+    if not type_str.include? "<"
+        return PolyEvalType.new(type_str, type_str, nil, nil)
     else
-        nil
+        idx = type_str.index "<"
+        type_name = type_str[0...idx]
+        other_str = type_str[idx + 1...-1]
+        if not other_str.include? ","
+            value_type = __s_to_type(other_str)
+            return PolyEvalType.new(type_str, type_name, value_type, nil)
+        else
+            idx = other_str.index ","
+            key_type = __s_to_type(other_str[0...idx])
+            value_type = __s_to_type(other_str[idx + 1..-1])
+            return PolyEvalType.new(type_str, type_name, value_type, key_type)
+        end
     end
 end
 
-def my_nullable_to_int(i)
-    i.nil? ? -1 : i
-end
-
-def my_list_sorted(lst)
-    lst.sort
-end
-
-def my_list_sorted_by_length(lst)
-    lst.sort_by(&:length)
-end
-
-def my_list_filter(lst)
-    lst.select { |x| x % 3 == 0 }
-end
-
-def my_list_map(lst)
-    lst.map { |x| x * x }
-end
-
-def my_list_reduce(lst)
-    lst.reduce(0) { |acc, x| acc * 10 + x }
-end
-
-def my_list_operations(lst)
-    lst.select { |x| x % 3 == 0 }
-        .map { |x| x * x }
-        .reduce(0) { |acc, x| acc * 10 + x }
-end
-
-def my_list_to_dict(lst)
-    lst.map { |x| [x, x * x] }.to_h
-end
-
-def my_dict_to_list(dict)
-    dict.sort_by(&:first).map { |k, v| k + v }
-end
-
-def my_print_string(s)
-    puts s
-end
-
-def my_print_string_list(lst)
-    for x in lst
-        print x + " "
+def __escape_string(s)
+    new_s = []
+    s.each_char do |c|
+        if c == "\\"
+            new_s.push("\\\\")
+        elsif c == "\""
+            new_s.push("\\\"")
+        elsif c == "\n"
+            new_s.push("\\n")
+        elsif c == "\t"
+            new_s.push("\\t")
+        elsif c == "\r"
+            new_s.push("\\r")
+        else
+            new_s.push(c)
+        end
     end
-    puts
+    return new_s.join("")
 end
 
-def my_print_int_list(lst)
-    my_print_string_list(lst.map { |x| my_int_to_string(x) })
+def __by_bool(value)
+    return value ? "true" : "false"
 end
 
-def my_print_dict(dict)
-    for k, v in dict
-        print my_int_to_string(k) + "->" + my_int_to_string(v) + " "
+def __by_int(value)
+    v = value.to_i
+    return v.to_s
+end
+
+def __by_double(value)
+    v = value.to_f
+    vs = format("%.6f", v)
+    while vs.end_with? "0"
+        vs = vs[0...-1]
     end
-    puts
+    if vs.end_with? "."
+        vs += "0"
+    end
+    if vs == "-0.0"
+        vs = "0.0"
+    end
+    return vs
 end
 
-my_print_string("Hello, World!")
-my_print_string(my_int_to_string(my_string_to_int("123")))
-my_print_string(my_double_to_string(my_string_to_double("123.456")))
-my_print_string(my_bool_to_string(false))
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(18))))
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(-15))))
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(0))))
-my_print_string_list(my_list_sorted(["e", "dddd", "ccccc", "bb", "aaa"]))
-my_print_string_list(my_list_sorted_by_length(["e", "dddd", "ccccc", "bb", "aaa"]))
-my_print_string(my_int_to_string(my_list_reduce(my_list_map(my_list_filter([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))))
-my_print_string(my_int_to_string(my_list_operations([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))
-my_print_dict(my_list_to_dict([3, 1, 4, 2, 5, 9, 8, 6, 7, 0]))
-my_print_int_list(my_dict_to_list({3 => 9, 1 => 1, 4 => 16, 2 => 4, 5 => 25, 9 => 81, 8 => 64, 6 => 36, 7 => 49, 0 => 0}))
+def __by_string(value)
+    return '"' + __escape_string(value) + '"'
+end
+
+def __by_list(value, ty)
+    v_strs = []
+    value.each do |v|
+        v_strs.push(__val_to_s(v, ty.value_type))
+    end
+    ret = "["
+    v_strs.each_with_index do |v, i|
+        ret += v
+        if i < v_strs.length - 1
+            ret += ", "
+        end
+    end
+    ret += "]"
+    return ret
+end
+
+def __by_ulist(value, ty)
+    v_strs = []
+    value.each do |v|
+        v_strs.push(__val_to_s(v, ty.value_type))
+    end
+    v_strs.sort!
+    ret = "["
+    v_strs.each_with_index do |v, i|
+        ret += v
+        if i < v_strs.length - 1
+            ret += ", "
+        end
+    end
+    ret += "]"
+    return ret
+end
+
+def __by_dict(value, ty)
+    v_strs = []
+    value.each do |key, val|
+        v_strs.push(__val_to_s(key, ty.key_type) + "=>" + __val_to_s(val, ty.value_type))
+    end
+    v_strs.sort!
+    ret = "{"
+    v_strs.each_with_index do |v, i|
+        ret += v
+        if i < v_strs.length - 1
+            ret += ", "
+        end
+    end
+    ret += "}"
+    return ret
+end
+
+def __by_option(value, ty)
+    if value.nil?
+        return "null"
+    else
+        return __val_to_s(value, ty.value_type)
+    end
+end
+
+def __val_to_s(value, ty)
+    type_name = ty.type_name
+    if type_name == "bool"
+        if not value.is_a? TrueClass and not value.is_a? FalseClass
+            raise "Type mismatch"
+        end
+        return __by_bool(value)
+    elsif type_name == "int"
+        if not value.is_a? Integer and not (value.is_a? Float and value.to_i == value)
+            raise "Type mismatch"
+        end
+        return __by_int(value)
+    elsif type_name == "double"
+        if not value.is_a? Integer and not value.is_a? Float
+            raise "Type mismatch"
+        end
+        return __by_double(value)
+    elsif type_name == "str"
+        if not value.is_a? String
+            raise "Type mismatch"
+        end
+        return __by_string(value)
+    elsif type_name == "list"
+        if not value.is_a? Array
+            raise "Type mismatch"
+        end
+        return __by_list(value, ty)
+    elsif type_name == "ulist"
+        if not value.is_a? Array
+            raise "Type mismatch"
+        end
+        return __by_ulist(value, ty)
+    elsif type_name == "dict"
+        if not value.is_a? Hash
+            raise "Type mismatch"
+        end
+        return __by_dict(value, ty)
+    elsif type_name == "option"
+        return __by_option(value, ty)
+    end
+    raise "Unknown type #{type_name}"
+end
+
+def __stringify(value, type_str)
+    return __val_to_s(value, __s_to_type(type_str)) + ":" + type_str
+end
+
+tfs = __stringify(true, "bool") + "\n" \
+    + __stringify(3, "int") + "\n" \
+    + __stringify(3.141592653, "double") + "\n" \
+    + __stringify(3.0, "double") + "\n" \
+    + __stringify("Hello, World!", "str") + "\n" \
+    + __stringify("!@#$%^&*()\\\"\n\t", "str") + "\n" \
+    + __stringify([1, 2, 3], "list<int>") + "\n" \
+    + __stringify([true, false, true], "list<bool>") + "\n" \
+    + __stringify([3, 2, 1], "ulist<int>") + "\n" \
+    + __stringify({1 => "one", 2 => "two"}, "dict<int,str>") + "\n" \
+    + __stringify({"one" => [1, 2, 3], "two" => [4, 5, 6]}, "dict<str,list<int>>") + "\n" \
+    + __stringify(nil, "option<int>") + "\n" \
+    + __stringify(3, "option<int>") + "\n"
+File.write("stringify.out", tfs)
