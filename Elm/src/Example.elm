@@ -5,103 +5,121 @@ import Posix.IO.Process as Process
 import Posix.IO.File as File
 import Round
 
-myStringToInt : String -> Int
-myStringToInt s =
-    String.toInt s |> Maybe.withDefault 0
+module Example exposing (..)
 
-myStringToDouble : String -> Float
-myStringToDouble s =
-    String.toFloat s |> Maybe.withDefault 0.0
+type alias PolyEvalType =
+    { typeStr : String
+    , typeName : String
+    , valueType : Maybe PolyEvalType
+    , keyType : Maybe PolyEvalType
+    }
 
-myIntToString : Int -> String
-myIntToString i =
-    String.fromInt i
+__newPolyEvalType : String -> String -> Maybe PolyEvalType -> Maybe PolyEvalType -> PolyEvalType
+__newPolyEvalType typeStr typeName valueType keyType =
+    { typeStr = typeStr, typeName = typeName, valueType = valueType, keyType = keyType }
 
-myDoubleToString : Float -> String
-myDoubleToString d =
-    Round.round 6 d
+__sToType : String -> PolyEvalType
+__sToType typeStr =
+    if not String.contains "<" typeStr Then
+        __newPolyEvalType typeStr typeStr Nothing Nothing
+    else
+        let idx = String.index "<" typeStr |> Maybe.withDefault 0
+            typeStr = String.slice 0 idx typeStr
+            otherStr = String.slice (idx + 1) (String.length typeStr - 1) typeStr
+        in if not String.contains "," otherStr Then
+            let valueType = __sToType otherStr
+            in __newPolyEvalType typeStr typeStr (Just valueType) Nothing
+        else
+            let idx = String.index "," otherStr |> Maybe.withDefault 0
+                keyType = __sToType (String.slice 0 idx otherStr)
+                valueType = __sToType (String.slice (idx + 1) (String.length otherStr) otherStr)
+            in __newPolyEvalType typeStr typeStr (Just valueType) (Just keyType)
 
-myBoolToString : Bool -> String
-myBoolToString b =
-    if b then "true" else "false"
+__escapeString : String -> String
+__escapeString s =
+    String.toList s |> List.map ( \c -> case c of
+        '\\' -> "\\\\"
+        '\"' -> "\\\""
+        '\n' -> "\\n"
+        '\t' -> "\\t"
+        '\r' -> "\\r"
+        _ -> String.fromChar c
+    ) |> String.join ""
 
-myIntToNullable : Int -> Maybe Int
-myIntToNullable i =
-    if i > 0 then Just i
-    else if i < 0 then Just (-i)
-    else Nothing
+__byBool : Bool -> String
+__byBool value =
+    if value then "true" else "false"
 
-myNullableToInt : Maybe Int -> Int
-myNullableToInt i =
-    Maybe.withDefault -1 i
+__byInt : Int -> String
+__byInt value =
+    String.fromInt value
 
-myListSorted : List String -> List String
-myListSorted lst =
-    List.sort lst
+__byDouble : Float -> String
+__byDouble value =
+    let vs = Round 6 value
+        vs = String.replace (Regex.regex "0+$") vs ""
+        vs = String.replace (Regex.regex "\\.$") vs ".0"
+    in if vs == "-0.0" then "0.0" else vs
 
-myListSortedByLength : List String -> List String
-myListSortedByLength lst =
-    List.sortBy String.length lst
+__byString : String -> String
+__byString value =
+    "\"" ++ __escapeString value ++ "\""
 
-myListFilter : List Int -> List Int
-myListFilter lst =
-    List.filter (\x -> modBy 3 x == 0) lst
+__byList : List a -> PolyEvalType -> String
+__byList value ty =
+    let vStrs = List.map ( \v -> __valToS v ty.valueType ) value
+    in "[" ++ String.join ", " vStrs ++ "]"
 
-myListMap : List Int -> List Int
-myListMap lst =
-    List.map (\x -> x * x) lst
+__byUList : List a -> PolyEvalType -> String
+__byUList value ty =
+    let vStrs = List.map ( \v -> __valToS v ty.valueType ) value
+    in "[" ++ String.join ", " (List.sort vStrs) ++ "]"
 
-myListReduce : List Int -> Int
-myListReduce lst =
-    List.foldl (\x acc -> acc * 10 + x) 0 lst
+__byDict : Dict comparable a -> PolyEvalType -> String
+__byDict value ty =
+    let vStrs = Dict.toList value |> List.map ( \(key, val) -> __valToS key ty.keyType ++ "=>" ++ __valToS val ty.valueType )
+    in "{" ++ String.join ", " (List.sort vStrs) ++ "}"
 
-myListOperations : List Int -> Int
-myListOperations lst =
-    lst |> List.filter (\x -> modBy 3 x == 0)
-        |> List.map (\x -> x * x)
-        |> List.foldl (\x acc -> acc * 10 + x) 0
+__byOption : Maybe a -> PolyEvalType -> String
+__byOption value ty =
+    case value of
+        Nothing -> "null"
+        Just v -> __valToS v ty.valueType
 
-myListToDict : List Int -> Dict Int Int
-myListToDict lst =
-    lst |> List.map (\x -> (x, x * x)) |> Dict.fromList
+__valToS : a -> Maybe PolyEvalType -> String
+__valToS value ty =
+    case ty of
+        Just ty ->
+            let typeName = ty.typeName
+            in case typeName of
+                "bool" -> if (value : Bool) then __byBool value else raise "Type mismatch"
+                "int" -> if (value : Int) then __byInt value else raise "Type mismatch"
+                "double" -> if (value : Float) then __byDouble value else raise "Type mismatch"
+                "str" -> if (value : String) then __byString value else raise "Type mismatch"
+                "list" -> if (value : List a) then __byList value ty else raise "Type mismatch"
+                "ulist" -> if (value : List a) then __byUList value ty else raise "Type mismatch"
+                "dict" -> if (value : Dict comparable a) then __byDict value ty else raise "Type mismatch"
+                "option" -> __byOption value ty
+                _ -> raise ("Unknown type " ++ typeName)
+        Nothing -> raise "Type mismatch"
 
-myDictToList : Dict Int Int -> List Int
-myDictToList dict =
-    dict |> Dict.toList |> List.sortBy Tuple.first |> List.map (\x -> Tuple.first x + Tuple.second x)
-
-myPrintString : String -> IO ()
-myPrintString s =
-    Process.print s
-
-myPrintStringList : List String -> IO ()
-myPrintStringList lst =
-    List.foldr (\x acc -> 
-        do ( File.write File.stdOut (x ++ " ") ) <| \_ -> acc) 
-        (Process.print "") lst
-
-myPrintIntList : List Int -> IO ()
-myPrintIntList lst =
-    lst |> List.map (\x -> myIntToString x) |> myPrintStringList
-
-myPrintDict : Dict Int Int -> IO ()
-myPrintDict dict =
-    Dict.foldr (\k v acc -> 
-        do ( File.write File.stdOut (myIntToString(k) ++ "->" ++ myIntToString(v) ++ " ") ) 
-            <| \_ -> acc ) 
-        (Process.print "") dict
+__stringify : a -> String -> String
+__stringify value typeStr =
+    __valToS value (Just (__sToType typeStr)) ++ ":" ++ typeStr
 
 program : Process -> IO ()
 program process =
-    do ( myPrintString("Hello, World!") ) <| \_ ->
-    do ( myPrintString(myIntToString(myStringToInt("123"))) ) <| \_ ->
-    do ( myPrintString(myDoubleToString(myStringToDouble("123.456"))) ) <| \_ ->
-    do ( myPrintString(myBoolToString(False)) ) <| \_ ->
-    do ( myPrintString(myIntToString(myNullableToInt(myIntToNullable(18)))) ) <| \_ ->
-    do ( myPrintString(myIntToString(myNullableToInt(myIntToNullable(-15)))) ) <| \_ ->
-    do ( myPrintString(myIntToString(myNullableToInt(myIntToNullable(0)))) ) <| \_ ->
-    do ( myPrintStringList(myListSorted(["e", "dddd", "ccccc", "bb", "aaa"])) ) <| \_ ->
-    do ( myPrintStringList(myListSortedByLength(["e", "dddd", "ccccc", "bb", "aaa"])) ) <| \_ ->
-    do ( myPrintString(myIntToString(myListReduce(myListMap(myListFilter([3, 12, 5, 8, 9, 15, 7, 17, 21, 11]))))) ) <| \_ ->
-    do ( myPrintString(myIntToString(myListOperations([3, 12, 5, 8, 9, 15, 7, 17, 21, 11]))) ) <| \_ ->
-    do ( myPrintDict(myListToDict([3, 1, 4, 2, 5, 9, 8, 6, 7, 0])) ) <| \_ ->
-    myPrintIntList(myDictToList(Dict.fromList([(3, 9), (1, 1), (4, 16), (2, 4), (5, 25), (9, 81), (8, 64), (6, 36), (7, 49), (0, 0)])))
+    let tfs = __stringify True "bool" ++ "\n"
+        ++ __stringify 3 "int" ++ "\n"
+        ++ __stringify 3.141592653 "double" ++ "\n"
+        ++ __stringify 3.0 "double" ++ "\n"
+        ++ __stringify "Hello, World!" "str" ++ "\n"
+        ++ __stringify "!@#$%^&*()\\\"\n\t" "str" ++ "\n"
+        ++ __stringify [1, 2, 3] "list<int>" ++ "\n"
+        ++ __stringify [True, False, True] "list<bool>" ++ "\n"
+        ++ __stringify [3, 2, 1] "ulist<int>" ++ "\n"
+        ++ __stringify (Dict.fromList [(1, "one"), (2, "two")]) "dict<int,str>" ++ "\n"
+        ++ __stringify (Dict.fromList [("one", [1, 2, 3]), ("two", [4, 5, 6])]) "dict<str,list<int>>" ++ "\n"
+        ++ __stringify Nothing "option<int>" ++ "\n"
+        ++ __stringify (Just 3) "option<int>" ++ "\n"
+    in File.writeContentsTo "stringify.out" tfs
