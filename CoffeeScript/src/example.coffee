@@ -23,20 +23,14 @@ __sToType = (typeStr) ->
 
 __escapeString = (s) ->
     newS = []
-    for i in [0...s.length]
-        c = s[i]
-        if c is "\\"
-            newS.push "\\"
-        else if c is "\""
-            newS.push "\\\""
-        else if c is "\n"
-            newS.push "\\n"
-        else if c is "\t"
-            newS.push "\\t"
-        else if c is "\r"
-            newS.push "\\r"
-        else
-            newS.push c
+    for c in s
+        switch c
+            when "\\" then newS.push "\\"
+            when "\"" then newS.push "\\\""
+            when "\n" then newS.push "\\n"
+            when "\t" then newS.push "\\t"
+            when "\r" then newS.push "\\r"
+            else newS.push c
     return newS.join ""
 
 __byBool = (value) ->
@@ -61,39 +55,16 @@ __byString = (value) ->
     return '"' + __escapeString(value) + '"'
 
 __byList = (value, ty) ->
-    vStrs = []
-    for i in [0...value.length]
-        vStrs.push __valToS value[i], ty.valueType
-    ret = "["
-    for i in [0...vStrs.length]
-        ret += vStrs[i]
-        ret += ", " if i < vStrs.length - 1
-    ret += "]"
-    return ret
+    vStrs = value.map (v) -> __valToS v, ty.valueType
+    return "[" + vStrs.join(", ") + "]"
 
 __byUlist = (value, ty) ->
-    vStrs = []
-    for i in [0...value.length]
-        vStrs.push __valToS value[i], ty.valueType
-    vStrs.sort()
-    ret = "["
-    for i in [0...vStrs.length]
-        ret += vStrs[i]
-        ret += ", " if i < vStrs.length - 1
-    ret += "]"
-    return ret
+    vStrs = value.map (v) -> __valToS v, ty.valueType
+    return "[" + vStrs.sort().join(", ") + "]"
 
 __byDict = (value, ty) ->
-    vStrs = []
-    for [key, val] from value
-        vStrs.push __valToS(key, ty.keyType) + "=>" + __valToS(val, ty.valueType)
-    vStrs.sort()
-    ret = "{"
-    for i in [0...vStrs.length]
-        ret += vStrs[i]
-        ret += ", " if i < vStrs.length - 1
-    ret += "}"
-    return ret
+    vStrs = [value...].map ([key, val]) -> __valToS(key, ty.keyType) + "=>" + __valToS(val, ty.valueType)
+    return "{" + vStrs.sort().join(", ") + "}"
 
 __byOption = (value, ty) ->
     if value is null

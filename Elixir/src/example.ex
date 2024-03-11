@@ -1,111 +1,121 @@
+defmodule PolyEvalType do
+    defstruct type_str: nil, type_name: nil, value_type: nil, key_type: nil
+end
+
 defmodule Example do
-    def my_string_to_int(s) do
-        String.to_integer(s)
+    def __new_poly_eval_type(type_str, type_name, value_type, key_type) do
+        %PolyEvalType{type_str: type_str, type_name: type_name, value_type: value_type, key_type: key_type}
     end
 
-    def my_string_to_double(s) do
-        String.to_float(s)
+    def __s_to_type(type_str) do
+        if String.contains?(type_str, "<") do
+            idx = :binary.match(type_str, "<") |> elem(0)
+            type_name = String.slice(type_str, 0..(idx - 1))
+            other_str = String.slice(type_str, (idx + 1)..-2)
+            if String.contains?(other_str, ",") do
+                idx = :binary.match(other_str, ",") |> elem(0)
+                key_type = __s_to_type(String.slice(other_str, 0..(idx - 1)))
+                value_type = __s_to_type(String.slice(other_str, (idx + 1)..-1))
+                __new_poly_eval_type(type_str, type_name, value_type, key_type)
+            else
+                value_type = __s_to_type(other_str)
+                __new_poly_eval_type(type_str, type_name, value_type, nil)
+            end
+        else
+            __new_poly_eval_type(type_str, type_str, nil, nil)
+        end
+    end
+    
+    def __escape_string(s) do
+        new_s = for c <- String.codepoints(s) do
+            case c do
+                "\\" -> "\\\\"
+                "\"" -> "\\\""
+                "\n" -> "\\n"
+                "\t" -> "\\t"
+                "\r" -> "\\r"
+                _ -> c
+            end
+        end
+        Enum.join(new_s)
     end
 
-    def my_int_to_string(i) do
-        Integer.to_string(i)
+    def __by_bool(value) do
+        if value, do: "true", else: "false"
     end
 
-    def my_double_to_string(d) do
-        :erlang.float_to_binary(d, decimals: 6)
+    def __by_int(value) do
+        Integer.to_string(value)
     end
 
-    def my_bool_to_string(b) do
-        if b, do: "true", else: "false"
+    def __by_double(value) do
+        vs = :erlang.float_to_binary(value, decimals: 6)
+        vs = String.replace(vs, ~r"0+$", "")
+        vs = String.replace(vs, ~r"\.$", ".0")
+        if vs == "-0.0", do: "0.0", else: vs
     end
 
-    def my_int_to_nullable(i) do
-        cond do
-            i > 0 -> i
-            i < 0 -> -i
-            true -> nil
+    def __by_string(value) do
+        "\"" <> __escape_string(value) <> "\""
+    end
+
+    def __by_list(value, ty) do
+        v_strs = Enum.map(value, fn v -> __val_to_s(v, ty.value_type) end)
+        "[" <> Enum.join(v_strs, ", ") <> "]"
+    end
+
+    def __by_ulist(value, ty) do
+        v_strs = Enum.map(value, fn v -> __val_to_s(v, ty.value_type) end)
+        "[" <> Enum.join(Enum.sort(v_strs), ", ") <> "]"
+    end
+
+    def __by_dict(value, ty) do
+        v_strs = Enum.map(value, fn {key, val} -> __val_to_s(key, ty.key_type) <> "=>" <> __val_to_s(val, ty.value_type) end)
+        "{" <> Enum.join(Enum.sort(v_strs), ", ") <> "}"
+    end
+    
+    def __by_option(value, ty) do
+        if value == nil do
+            "null"
+        else
+            __val_to_s(value, ty.value_type)
         end
     end
 
-    def my_nullable_to_int(i) do
-        case i do
-            nil -> -1
-            x -> x
+    def __val_to_s(value, ty) do
+        type_name = ty.type_name
+        case type_name do
+            "bool" -> if is_boolean(value), do: __by_bool(value), else: raise "Type mismatch"
+            "int" -> if is_integer(value), do: __by_int(value), else: raise "Type mismatch"
+            "double" -> if is_float(value), do: __by_double(value), else: raise "Type mismatch"
+            "str" -> if is_binary(value), do: __by_string(value), else: raise "Type mismatch"
+            "list" -> if is_list(value), do: __by_list(value, ty), else: raise "Type mismatch"
+            "ulist" -> if is_list(value), do: __by_ulist(value, ty), else: raise "Type mismatch"
+            "dict" -> if is_map(value), do: __by_dict(value, ty), else: raise "Type mismatch"
+            "option" -> __by_option(value, ty)
+            _ -> raise "Unknown type #{type_name}"
         end
     end
 
-    def my_list_sorted(lst) do
-        Enum.sort(lst)
-    end
-
-    def my_list_sorted_by_length(lst) do
-        Enum.sort_by(lst, &String.length/1)
-    end
-
-    def my_list_filter(lst) do
-        Enum.filter(lst, &(rem(&1, 3) == 0))
-    end
-
-    def my_list_map(lst) do
-        Enum.map(lst, &(&1 * &1))
-    end
-
-    def my_list_reduce(lst) do
-        Enum.reduce(lst, 0, &(&2 * 10 + &1))
-    end
-
-    def my_list_operations(lst) do
-        lst |> Enum.filter(fn x -> rem(x, 3) == 0 end)
-        |> Enum.map(fn x -> x * x end)
-        |> Enum.reduce(0, fn x, acc -> acc * 10 + x end)
-    end
-
-    def my_list_to_dict(lst) do
-        Map.new(lst, fn x -> {x, x * x} end)
-    end
-
-    def my_dict_to_list(dict) do
-        dict |> Enum.to_list()
-        |> Enum.sort()
-        |> Enum.map(fn {k, v} -> k + v end)
-    end
-
-    def my_print_string(s) do
-        IO.puts(s)
-    end
-
-    def my_print_string_list(lst) do
-        for x <- lst do
-            IO.write(x <> " ")
-        end
-        IO.puts("")
-    end
-
-    def my_print_int_list(lst) do
-        lst |> Enum.map(&my_int_to_string/1) |> my_print_string_list()
-    end
-
-    def my_print_dict(dict) do
-        for {k, v} <- dict do
-            IO.write(my_int_to_string(k) <> "->" <> my_int_to_string(v) <> " ")
-        end
-        IO.puts("")
+    def __stringify(value, type_str) do
+        __val_to_s(value, __s_to_type(type_str)) <> ":" <> type_str
     end
 
     def main() do
-        my_print_string("Hello, World!")
-        my_print_string(my_int_to_string(my_string_to_int("123")))
-        my_print_string(my_double_to_string(my_string_to_double("123.456")))
-        my_print_string(my_bool_to_string(false))
-        my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(18))))
-        my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(-15))))
-        my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(0))))
-        my_print_string_list(my_list_sorted(["e", "dddd", "ccccc", "bb", "aaa"]))
-        my_print_string_list(my_list_sorted_by_length(["e", "dddd", "ccccc", "bb", "aaa"]))
-        my_print_string(my_int_to_string(my_list_reduce(my_list_map(my_list_filter([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))))
-        my_print_string(my_int_to_string(my_list_operations([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))
-        my_print_dict(my_list_to_dict([3, 1, 4, 2, 5, 9, 8, 6, 7, 0]))
-        my_print_int_list(my_dict_to_list(%{3 => 9, 1 => 1, 4 => 16, 2 => 4, 5 => 25, 9 => 81, 8 => 64, 6 => 36, 7 => 49, 0 => 0}))
+        tfs = __stringify(true, "bool") <> "\n" <>
+            __stringify(3, "int") <> "\n" <>
+            __stringify(3.141592653, "double") <> "\n" <>
+            __stringify(3.0, "double") <> "\n" <>
+            __stringify("Hello, World!", "str") <> "\n" <>
+            __stringify("!@#$%^&*()\\\"\n\t", "str") <> "\n" <>
+            __stringify([1, 2, 3], "list<int>") <> "\n" <>
+            __stringify([true, false, true], "list<bool>") <> "\n" <>
+            __stringify([3, 2, 1], "ulist<int>") <> "\n" <>
+            __stringify(%{1 => "one", 2 => "two"}, "dict<int,str>") <> "\n" <>
+            __stringify(%{"one" => [1, 2, 3], "two" => [4, 5, 6]}, "dict<str,list<int>>") <> "\n" <>
+            __stringify(nil, "option<int>") <> "\n" <>
+            __stringify(3, "option<int>") <> "\n"
+        File.write!("__stringify.out", tfs)
     end
 end
 

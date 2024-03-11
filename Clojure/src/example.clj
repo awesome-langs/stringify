@@ -24,16 +24,15 @@
             (__new-poly-eval-type type-str type-name value-type key-type))))))
 
 (defn __escape-string [s]
-    (let [new-s (atom [])]
-    (doseq [c s]
-        (cond
-            (= c \\) (swap! new-s conj "\\\\")
-            (= c \") (swap! new-s conj "\\\"")
-            (= c \newline) (swap! new-s conj "\\n")
-            (= c \tab) (swap! new-s conj "\\t")
-            (= c \return) (swap! new-s conj "\\r")
-            :else (swap! new-s conj c)))
-    (apply str @new-s)))
+    (let [new-s (map (fn [c]
+                        (cond
+                            (= c \\) "\\\\"
+                            (= c \") "\\\""
+                            (= c \newline) "\\n"
+                            (= c \tab) "\\t"
+                            (= c \return) "\\r"
+                            :else (str c))) s)]
+        (apply str new-s)))
 
 (defn __by-bool [value]
     (if value "true" "false"))
@@ -56,42 +55,16 @@
     (str "\"" (__escape-string value) "\""))
 
 (defn __by-list [value ty]
-    (let [v-strs (atom [])]
-    (doseq [v value]
-        (swap! v-strs conj (__val-to-s v (.-value-type ty))))
-    (let [ret (atom "[")]
-        (doseq [i (range (count @v-strs))]
-            (swap! ret str (nth @v-strs i))
-            (if (< i (- (count @v-strs) 1))
-                (swap! ret str ", ")))
-        (swap! ret str "]")
-        @ret)))
+    (let [v-strs (map (fn [v] (__val-to-s v (.-value-type ty))) value)]
+        (str "[" (apply str (interpose ", " v-strs)) "]")))
 
 (defn __by-ulist [value ty]
-    (let [v-strs (atom [])]
-    (doseq [v value]
-        (swap! v-strs conj (__val-to-s v (.-value-type ty))))
-    (swap! v-strs sort)
-    (let [ret (atom "[")]
-        (doseq [i (range (count @v-strs))]
-            (swap! ret str (nth @v-strs i))
-            (if (< i (- (count @v-strs) 1))
-                (swap! ret str ", ")))
-        (swap! ret str "]")
-        @ret)))
+    (let [v-strs (map (fn [v] (__val-to-s v (.-value-type ty))) value)]
+        (str "[" (apply str (interpose ", " (sort v-strs))) "]")))
     
 (defn __by-dict [value ty]
-    (let [v-strs (atom [])]
-    (doseq [[key val] value]
-        (swap! v-strs conj (str (__val-to-s key (.-key-type ty)) "=>" (__val-to-s val (.-value-type ty)))))
-    (swap! v-strs sort)
-    (let [ret (atom "{")]
-        (doseq [i (range (count @v-strs))]
-            (swap! ret str (nth @v-strs i))
-            (if (< i (- (count @v-strs) 1))
-                (swap! ret str ", ")))
-        (swap! ret str "}")
-        @ret)))
+    (let [v-strs (map (fn [[k v]] (str (__val-to-s k (.-key-type ty)) "=>" (__val-to-s v (.-value-type ty)))) value)]
+        (str "{" (apply str (interpose ", " (sort v-strs))) "}")))
 
 (defn __by-option [value ty]
     (if (nil? value)

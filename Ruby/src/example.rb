@@ -29,23 +29,22 @@ def __s_to_type(type_str)
 end
 
 def __escape_string(s)
-    new_s = []
-    s.each_char do |c|
-        if c == "\\"
-            new_s.push("\\\\")
+    new_s = s.chars.map do |c|
+        if c == "\\"   
+            "\\\\"
         elsif c == "\""
-            new_s.push("\\\"")
+            "\\\""
         elsif c == "\n"
-            new_s.push("\\n")
+            "\\n"
         elsif c == "\t"
-            new_s.push("\\t")
+            "\\t"
         elsif c == "\r"
-            new_s.push("\\r")
+            "\\r"
         else
-            new_s.push(c)
+            c
         end
     end
-    return new_s.join("")
+    return new_s.join
 end
 
 def __by_bool(value)
@@ -77,53 +76,24 @@ def __by_string(value)
 end
 
 def __by_list(value, ty)
-    v_strs = []
-    value.each do |v|
-        v_strs.push(__val_to_s(v, ty.value_type))
+    v_strs = value.map do |v|
+        __val_to_s(v, ty.value_type)
     end
-    ret = "["
-    v_strs.each_with_index do |v, i|
-        ret += v
-        if i < v_strs.length - 1
-            ret += ", "
-        end
-    end
-    ret += "]"
-    return ret
+    return "[" + v_strs.join(", ") + "]"
 end
 
 def __by_ulist(value, ty)
-    v_strs = []
-    value.each do |v|
-        v_strs.push(__val_to_s(v, ty.value_type))
+    v_strs = value.map do |v|
+        __val_to_s(v, ty.value_type)
     end
-    v_strs.sort!
-    ret = "["
-    v_strs.each_with_index do |v, i|
-        ret += v
-        if i < v_strs.length - 1
-            ret += ", "
-        end
-    end
-    ret += "]"
-    return ret
+    return "[" + v_strs.sort.join(", ") + "]"
 end
 
 def __by_dict(value, ty)
-    v_strs = []
-    value.each do |key, val|
-        v_strs.push(__val_to_s(key, ty.key_type) + "=>" + __val_to_s(val, ty.value_type))
+    v_strs = value.map do |key, val|
+        __val_to_s(key, ty.key_type) + "=>" + __val_to_s(val, ty.value_type)
     end
-    v_strs.sort!
-    ret = "{"
-    v_strs.each_with_index do |v, i|
-        ret += v
-        if i < v_strs.length - 1
-            ret += ", "
-        end
-    end
-    ret += "}"
-    return ret
+    return "{" + v_strs.sort.join(", ") + "}"
 end
 
 def __by_option(value, ty)

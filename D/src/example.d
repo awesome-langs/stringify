@@ -3,6 +3,7 @@ import std.string;
 import std.conv;
 import std.algorithm;
 import std.typecons;
+import std.array;
 
 class PolyEvalType {
     public string typeStr;
@@ -38,7 +39,7 @@ PolyEvalType __sToType(string typeStr) {
 }
 
 string __escapeString(string s) {
-    string newS;
+    string[] newS;
     foreach (c; s) {
         if (c == '\\') {
             newS ~= "\\\\";
@@ -54,7 +55,7 @@ string __escapeString(string s) {
             newS ~= c.to!string;
         }
     }
-    return newS;
+    return newS.join("");
 }
 
 string __byBool(bool value) {

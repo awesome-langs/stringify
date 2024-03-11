@@ -28,8 +28,7 @@ function __sToType(typeStr) {
 
 function __escapeString(s) {
     let newS = [];
-    for (let i = 0; i < s.length; i++) {
-        const c = s[i];
+    for (let c of s) {
         if (c === "\\") {
             newS.push("\\\\");
         } else if (c === "\"") {
@@ -76,53 +75,18 @@ function __byString(value) {
 }
 
 function __byList(value, t) {
-    const vStrs = [];
-    for (let i = 0; i < value.length; i++) {
-        vStrs.push(__valToS(value[i], t.valueType));
-    }
-    let ret = "[";
-    for (let i = 0; i < vStrs.length; i++) {
-        ret += vStrs[i];
-        if (i < vStrs.length - 1) {
-            ret += ", ";
-        }
-    }
-    ret += "]";
-    return ret;
+    const vStrs = value.map((v) => __valToS(v, t.valueType));
+    return "[" + vStrs.join(", ") + "]";
 }
 
 function __byUlist(value, t) {
-    const vStrs = [];
-    for (let i = 0; i < value.length; i++) {
-        vStrs.push(__valToS(value[i], t.valueType));
-    }
-    vStrs.sort();
-    let ret = "[";
-    for (let i = 0; i < vStrs.length; i++) {
-        ret += vStrs[i];
-        if (i < vStrs.length - 1) {
-            ret += ", ";
-        }
-    }
-    ret += "]";
-    return ret;
+    const vStrs = value.map((v) => __valToS(v, t.valueType));
+    return "[" + vStrs.sort().join(", ") + "]";
 }
 
 function __byDict(value, t) {
-    const vStrs = [];
-    for (let [key, val] of value) {
-        vStrs.push(__valToS(key, t.keyType) + "=>" + __valToS(val, t.valueType));
-    }
-    vStrs.sort();
-    let ret = "{";
-    for (let i = 0; i < vStrs.length; i++) {
-        ret += vStrs[i];
-        if (i < vStrs.length - 1) {
-            ret += ", ";
-        }
-    }
-    ret += "}";
-    return ret;
+    const vStrs = [...value].map(([key, val]) => __valToS(key, t.keyType) + "=>" + __valToS(val, t.valueType));
+    return "{" + vStrs.sort().join(", ") + "}";
 }
 
 function __byOption(value, t) {

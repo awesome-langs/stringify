@@ -32,23 +32,22 @@ def __s_to_type(type_str : String) : PolyEvalType
 end
 
 def __escape_string(s : String) : String
-    new_s = ""
-    s.each_char do |c|
+    new_s = s.chars.map do |c|
         if c == '\\'   
-            new_s += "\\\\"
+            "\\\\"
         elsif c == '"'
-            new_s += "\\\""
+            "\\\""
         elsif c == '\n'
-            new_s += "\\n"
+            "\\n"
         elsif c == '\t'
-            new_s += "\\t"
+            "\\t"
         elsif c == '\r'
-            new_s += "\\r"
+            "\\r"
         else
-            new_s += c.to_s
+            c.to_s
         end
     end
-    return new_s
+    return new_s.join
 end
 
 def __by_bool(value : Bool) : String
@@ -80,53 +79,24 @@ def __by_string(value : String) : String
 end
 
 def __by_list(value : Array(_), ty : PolyEvalType) : String
-    v_strs = [] of String
-    value.each do |v|
-        v_strs << __val_to_s(v, ty.value_type.not_nil!)
+    v_strs = value.map do |v|
+        __val_to_s(v, ty.value_type.not_nil!)
     end
-    ret = "["
-    v_strs.each_with_index do |v, i|
-        ret += v
-        if i < v_strs.size - 1
-            ret += ", "
-        end
-    end
-    ret += "]"
-    return ret
+    return "[" + v_strs.join(", ") + "]"
 end
 
 def __by_ulist(value : Array(_), ty : PolyEvalType) : String
-    v_strs = [] of String
-    value.each do |v|
-        v_strs << __val_to_s(v, ty.value_type.not_nil!)
+    v_strs = value.map do |v|
+        __val_to_s(v, ty.value_type.not_nil!)
     end
-    v_strs.sort!
-    ret = "["
-    v_strs.each_with_index do |v, i|
-        ret += v
-        if i < v_strs.size - 1
-            ret += ", "
-        end
-    end
-    ret += "]"
-    return ret
+    return "[" + v_strs.sort.join(", ") + "]"
 end
 
 def __by_dict(value : Hash(_, _), ty : PolyEvalType) : String
-    v_strs = [] of String
-    value.each do |key, val|
-        v_strs << __val_to_s(key, ty.key_type.not_nil!) + "=>" + __val_to_s(val, ty.value_type.not_nil!)
+    v_strs = value.map do |key, val|
+        __val_to_s(key, ty.key_type.not_nil!) + "=>" + __val_to_s(val, ty.value_type.not_nil!)
     end
-    v_strs = v_strs.sort
-    ret = "{"
-    v_strs.each_with_index do |v, i|
-        ret += v
-        if i < v_strs.size - 1
-            ret += ", "
-        end
-    end
-    ret += "}"
-    return ret
+    return "{" + v_strs.sort.join(", ") + "}"
 end
 
 def __by_option(value : Nil | _, ty : PolyEvalType) : String

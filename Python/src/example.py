@@ -69,44 +69,18 @@ def __by_string(value):
 
 
 def __by_list(value, ty: PolyEvalType):
-    v_strs = []
-    for v in value:
-        v_strs.append(__val_to_s(v, ty.value_type))
-    ret = "["
-    for i in range(len(v_strs)):
-        ret += v_strs[i]
-        if i < len(v_strs) - 1:
-            ret += ", "
-    ret += "]"
-    return ret
+    v_strs = [__val_to_s(v, ty.value_type) for v in value]
+    return "[" + ", ".join(v_strs) + "]"
 
 
 def __by_ulist(value, ty: PolyEvalType):
-    v_strs = []
-    for v in value:
-        v_strs.append(__val_to_s(v, ty.value_type))
-    v_strs = sorted(v_strs)
-    ret = "["
-    for i in range(len(v_strs)):
-        ret += v_strs[i]
-        if i < len(v_strs) - 1:
-            ret += ", "
-    ret += "]"
-    return ret
+    v_strs = [__val_to_s(v, ty.value_type) for v in value]
+    return "[" + ", ".join(sorted(v_strs)) + "]"
 
 
 def __by_dict(value, ty: PolyEvalType):
-    v_strs = []
-    for key, val in value.items():
-        v_strs.append(__val_to_s(key, ty.key_type) + "=>" + __val_to_s(val, ty.value_type))
-    v_strs = sorted(v_strs)
-    ret = "{"
-    for i in range(len(v_strs)):
-        ret += v_strs[i]
-        if i < len(v_strs) - 1:
-            ret += ", "
-    ret += "}"
-    return ret
+    v_strs = [__val_to_s(key, ty.key_type) + "=>" + __val_to_s(val, ty.value_type) for key, val in value.items()]
+    return "{" + ", ".join(sorted(v_strs)) + "}"
 
 
 def __by_option(value, ty: PolyEvalType):

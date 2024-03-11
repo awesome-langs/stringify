@@ -21,17 +21,16 @@
                     (__new-poly-eval-type type-str type-name value-type key-type))))))
 
 (define (__escape-string s)
-    (let ([new-s ""])
-        (for ([c s])
-            (cond
-                [(char=? c #\\) (set! new-s (string-append new-s "\\\\"))]
-                [(char=? c #\") (set! new-s (string-append new-s "\\\""))]
-                [(char=? c #\newline) (set! new-s (string-append new-s "\\n"))]
-                [(char=? c #\tab) (set! new-s (string-append new-s "\\t"))]
-                [(char=? c #\return) (set! new-s (string-append new-s "\\r"))]
-                [else (set! new-s (string-append new-s (string c)))])
-        )
-        new-s))
+    (let ([new-s (map (lambda (c)
+                         (cond
+                             [(char=? c #\\) "\\\\"]
+                             [(char=? c #\") "\\\""]
+                             [(char=? c #\newline) "\\n"]
+                             [(char=? c #\tab) "\\t"]
+                             [(char=? c #\return) "\\r"]
+                             [else (string c)]))
+                      (string->list s))])
+        (apply string-append new-s)))
 
 (define (__by-bool value)
     (if value "true" "false"))
@@ -55,39 +54,16 @@
     (string-append "\"" (__escape-string value) "\""))
 
 (define (__by-list value ty)
-    (let ([v-strs (list)])
-        (for ([v value])
-            (set! v-strs (append v-strs (list (__val-to-s v (PolyEvalType-value-type ty))))))
-        (let ([ret "["])
-            (for ([i (in-range (length v-strs))])
-                (set! ret (string-append ret (list-ref v-strs i)))
-                (when (< i (- (length v-strs) 1))
-                    (set! ret (string-append ret ", "))))
-            (string-append ret "]"))))
+    (let ([v-strs (map (lambda (v) (__val-to-s v (PolyEvalType-value-type ty))) value)])
+        (string-append "[" (string-join v-strs ", ") "]")))
 
 (define (__by-ulist value ty)
-    (let ([v-strs (list)])
-        (for ([v value])
-            (set! v-strs (append v-strs (list (__val-to-s v (PolyEvalType-value-type ty))))))
-        (set! v-strs (sort v-strs string<?))
-        (let ([ret "["])
-            (for ([i (in-range (length v-strs))])
-                (set! ret (string-append ret (list-ref v-strs i)))
-                (when (< i (- (length v-strs) 1))
-                    (set! ret (string-append ret ", "))))
-            (string-append ret "]"))))
-
+    (let ([v-strs (map (lambda (v) (__val-to-s v (PolyEvalType-value-type ty))) value)])
+        (string-append "[" (string-join (sort v-strs string<?) ", ") "]")))
+    
 (define (__by-dict value ty)
-    (let ([v-strs (list)])
-        (for ([(key val) value])
-            (set! v-strs (append v-strs (list (string-append (__val-to-s key (PolyEvalType-key-type ty)) "=>" (__val-to-s val (PolyEvalType-value-type ty)))))))
-        (set! v-strs (sort v-strs string<?))
-        (let ([ret "{"])
-            (for ([i (in-range (length v-strs))])
-                (set! ret (string-append ret (list-ref v-strs i)))
-                (when (< i (- (length v-strs) 1))
-                    (set! ret (string-append ret ", "))))
-            (string-append ret "}"))))
+    (let ([v-strs (hash-map value (lambda (k v) (string-append (__val-to-s k (PolyEvalType-key-type ty)) "=>" (__val-to-s v (PolyEvalType-value-type ty)))))])
+        (string-append "{" (string-join (sort v-strs string<?) ", ") "}")))
 
 (define (__by-option value ty)
     (if (false? value)

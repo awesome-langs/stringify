@@ -85,56 +85,18 @@ class Example {
     }
 
     public static string __ByList(IList<object> value, PolyEvalType ty) {
-        List<string> vStrs = new List<string>();
-        foreach (object v in value) {
-            vStrs.Add(__ValToS(v, ty.valueType));
-        }
-        StringBuilder ret = new StringBuilder();
-        ret.Append("[");
-        for (int i = 0; i < vStrs.Count; i++) {
-            ret.Append(vStrs[i]);
-            if (i < vStrs.Count - 1) {
-                ret.Append(", ");
-            }
-        }
-        ret.Append("]");
-        return ret.ToString();
+        var vStrs = value.Select(v => __ValToS(v, ty.valueType));
+        return "[" + string.Join(", ", vStrs) + "]";
     }
 
     public static string __ByUlist(IList<object> value, PolyEvalType ty) {
-        List<string> vStrs = new List<string>();
-        foreach (object v in value) {
-            vStrs.Add(__ValToS(v, ty.valueType));
-        }
-        vStrs.Sort();
-        StringBuilder ret = new StringBuilder();
-        ret.Append("[");
-        for (int i = 0; i < vStrs.Count; i++) {
-            ret.Append(vStrs[i]);
-            if (i < vStrs.Count - 1) {
-                ret.Append(", ");
-            }
-        }
-        ret.Append("]");
-        return ret.ToString();
+        var vStrs = value.Select(v => __ValToS(v, ty.valueType));
+        return "[" + string.Join(", ", vStrs.OrderBy(x => x)) + "]";
     }
 
     public static string __ByDict(IDictionary<object, object> value, PolyEvalType ty) {
-        List<string> vStrs = new List<string>();
-        foreach (KeyValuePair<object, object> kv in value) {
-            vStrs.Add(__ValToS(kv.Key, ty.keyType) + "=>" + __ValToS(kv.Value, ty.valueType));
-        }
-        vStrs.Sort();
-        StringBuilder ret = new StringBuilder();
-        ret.Append("{");
-        for (int i = 0; i < vStrs.Count; i++) {
-            ret.Append(vStrs[i]);
-            if (i < vStrs.Count - 1) {
-                ret.Append(", ");
-            }
-        }
-        ret.Append("}");
-        return ret.ToString();
+        var vStrs = value.Select(kv => __ValToS(kv.Key, ty.keyType) + "=>" + __ValToS(kv.Value, ty.valueType));
+        return "{" + string.Join(", ", vStrs.OrderBy(x => x)) + "}";
     }
 
     public static string __ByOption(object value, PolyEvalType ty) {

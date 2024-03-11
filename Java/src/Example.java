@@ -82,53 +82,18 @@ public class Example {
     }
 
     public static String __byList(List<Object> value, PolyEvalType t) {
-        List<String> vStrs = new ArrayList<>();
-        for (Object v : value) {
-            vStrs.add(__valToS(v, t.valueType));
-        }
-        StringBuilder ret = new StringBuilder("[");
-        for (int i = 0; i < vStrs.size(); i++) {
-            ret.append(vStrs.get(i));
-            if (i < vStrs.size() - 1) {
-                ret.append(", ");
-            }
-        }
-        ret.append("]");
-        return ret.toString();
+        var vStrs = value.stream().map(v -> __valToS(v, t.valueType)).toList();
+        return "[" + String.join(", ", vStrs) + "]";
     }
 
     public static String __byUlist(List<Object> value, PolyEvalType t) {
-        List<String> vStrs = new ArrayList<>();
-        for (Object v : value) {
-            vStrs.add(__valToS(v, t.valueType));
-        }
-        Collections.sort(vStrs);
-        StringBuilder ret = new StringBuilder("[");
-        for (int i = 0; i < vStrs.size(); i++) {
-            ret.append(vStrs.get(i));
-            if (i < vStrs.size() - 1) {
-                ret.append(", ");
-            }
-        }
-        ret.append("]");
-        return ret.toString();
+        var vStrs = value.stream().map(v -> __valToS(v, t.valueType)).sorted(Comparator.naturalOrder()).toList();
+        return "[" + String.join(", ", vStrs) + "]";
     }
 
     public static String __byDict(Map<Object, Object> value, PolyEvalType t) {
-        List<String> vStrs = new ArrayList<>();
-        for (Map.Entry<Object, Object> entry : value.entrySet()) {
-            vStrs.add(__valToS(entry.getKey(), t.keyType) + "=>" + __valToS(entry.getValue(), t.valueType));
-        }
-        vStrs.sort(Comparator.naturalOrder());
-        StringBuilder ret = new StringBuilder("{");
-        for (int i = 0; i < vStrs.size(); i++) {
-            ret.append(vStrs.get(i));
-            if (i < vStrs.size() - 1) {
-                ret.append(", ");
-            }
-        }
-        ret.append("}");
-        return ret.toString();
+        var vStrs = value.entrySet().stream().map(entry -> __valToS(entry.getKey(), t.keyType) + "=>" + __valToS(entry.getValue(), t.valueType)).sorted(Comparator.naturalOrder()).toList();
+        return "{" + String.join(", ", vStrs) + "}";
     }
 
     public static String __byOption(Optional<Object> value, PolyEvalType t) {
