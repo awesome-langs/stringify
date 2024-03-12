@@ -2,88 +2,150 @@ import strutils
 import options
 import algorithm
 import sequtils
-import sugar
 import tables
-import os
+import typetraits
 
-proc myStringToInt(s: string): int =
-    result = parseInt(s)
+type
+    PolyEvalType = ref object
+        typeStr: string
+        typeName: string
+        valueType: PolyEvalType
+        keyType: PolyEvalType
 
-proc myStringToDouble(s: string): float =
-    result = parseFloat(s)
+proc newPolyEvalType(typeStr: string, typeName: string, valueType: PolyEvalType, keyType: PolyEvalType): PolyEvalType =
+    new result
+    result.typeStr = typeStr
+    result.typeName = typeName
+    result.valueType = valueType
+    result.keyType = keyType
+    
 
-proc myIntToString(i: int): string =
-    result = $i
+proc valToS[T](value: T, ty: PolyEvalType): string
 
-proc myDoubleToString(d: float): string =
-    result = d.formatFloat(ffDecimal, 6)
-
-proc myBoolToString(b: bool): string =
-    result = if b: "true" else: "false"
-
-proc myIntToNullable(i: int): Option[int] =
-    if i > 0:
-        result = some(i)
-    elif i < 0:
-        result = some(-i)
+proc sToType(typeStr: string): PolyEvalType =
+    if typeStr.contains("<"):
+        let idx = typeStr.find("<")
+        let typeName = typeStr[0 ..< idx ]
+        let otherStr = typeStr[idx + 1 ..< typeStr.len - 1]
+        if otherStr.contains(","):
+            let idx = otherStr.find(",")
+            let keyType = sToType(otherStr[0 ..< idx ])
+            let valueType = sToType(otherStr[idx + 1 ..< otherStr.len])
+            newPolyEvalType(typeStr, typeName, valueType, keyType)
+        else:
+            let valueType = sToType(otherStr)
+            newPolyEvalType(typeStr, typeName, valueType, nil)
     else:
-        result = none(int)
+        newPolyEvalType(typeStr, typeStr, nil, nil)
 
-proc myNullableToInt(i: Option[int]): int =
-    result = if i.isSome(): i.get() else: -1
+proc escapeString(s: string): string =
+    var newS = ""
+    for c in s:
+        case c
+        of '\\': newS.add("\\\\")
+        of '"': newS.add("\\\"")
+        of '\n': newS.add("\\n")
+        of '\t': newS.add("\\t")
+        of '\r': newS.add("\\r")
+        else: newS.add(c)
+    newS
 
-proc myListSorted(lst: seq[string]): seq[string] =
-    result = lst.sorted()
+proc byBool(value: bool): string =
+    if value: "true" else: "false"
 
-proc myListSortedByLength(lst: seq[string]): seq[string] =
-    result = lst.sortedByIt(it.len)
+proc byInt(value: int): string =
+    $value
 
-proc myListFilter(lst: seq[int]): seq[int] =
-    result = lst.filterIt(it mod 3 == 0)
+proc byDouble(value: float): string =
+    var vs = value.formatFloat(ffDecimal, 6)
+    while vs.endsWith("0"):
+        vs = vs[0 ..< vs.len - 1]
+    if vs.endsWith("."):
+        vs.add('0')
+    if vs == "-0.0":
+        vs = "0.0"
+    vs
 
-proc myListMap(lst: seq[int]): seq[int] =
-    result = lst.mapIt(it * it)
+proc byString(value: string): string =
+    '"' & escapeString(value) & '"'
 
-proc myListReduce(lst: seq[int]): int =
-    result = lst.foldl(a * 10 + b, 0)
+proc byList(value: seq[auto], ty: PolyEvalType): string =
+    var vStrs = value.mapIt(valToS(it, ty.valueType))
+    "[" & vStrs.join(", ") & "]"
 
-proc myListOperations(lst: seq[int]): int =
-    result = lst.filter(x => x mod 3 == 0)
-        .map(x => x * x)
-        .foldl(a * 10 + b, 0)
+proc byUlist(value: seq[auto], ty: PolyEvalType): string =
+    var vStrs = value.mapIt(valToS(it, ty.valueType))
+    "[" & vStrs.sorted.join(", ") & "]"
 
-proc myListToDict(lst: seq[int]): Table[int, int] =
-    result = toTable(lst.mapIt((it, it * it)))
+proc byDict[K, V](value: Table[K, V], ty: PolyEvalType): string =
+    var vStrs = toSeq(value.pairs).mapIt(valToS(it[0], ty.keyType) & "=>" & valToS(it[1], ty.valueType))
+    "{" & vStrs.sorted.join(", ") & "}"
 
-proc myDictToList(dict: Table[int, int]): seq[int] =
-    result = toSeq(dict.pairs()).sortedByIt(it[0]).mapIt(it[0] + it[1])
+proc byOption(value: Option[auto], ty: PolyEvalType): string =
+    if value.isSome:
+        valToS(value.get, ty.valueType)
+    else:
+        "null"
 
-proc myPrintString(s: string): void =
-    echo s
+proc valToS[T](value: T, ty: PolyEvalType): string =
+    let typeName = ty.typeName
+    case typeName
+    of "bool": 
+        when T is bool: 
+            byBool(value) 
+        else: 
+            raise newException(ValueError, "Type mismatch")
+    of "int": 
+        when T is int: 
+            byInt(value)
+        else: 
+            raise newException(ValueError, "Type mismatch")
+    of "double": 
+        when T is float: 
+            byDouble(value) 
+        else: 
+            raise newException(ValueError, "Type mismatch")
+    of "str": 
+        when T is string: 
+            byString(value) 
+        else: 
+            raise newException(ValueError, "Type mismatch")
+    of "list": 
+        when T is seq: 
+            byList(value, ty) 
+        else: 
+            raise newException(ValueError, "Type mismatch")
+    of "ulist": 
+        when T is seq: 
+            byUlist(value, ty) 
+        else: 
+            raise newException(ValueError, "Type mismatch")
+    of "dict": 
+        when T is Table: 
+            byDict(value, ty) 
+        else:
+            raise newException(ValueError, "Type mismatch")
+    of "option":
+        when T is Option: 
+            byOption(value, ty)
+        else:
+            raise newException(ValueError, "Type mismatch")
+    else: raise newException(ValueError, "Unknown type " & typeName)
 
-proc myPrintStringList(lst: seq[string]): void =
-    for x in lst:
-        stdout.write x & " "
-    echo ""
+proc stringify[T](value: T, typeStr: string): string =
+    valToS(value, sToType(typeStr)) & ":" & typeStr
 
-proc myPrintIntList(lst: seq[int]): void =
-    myPrintStringList(lst.mapIt(myIntToString(it)))
-
-proc myPrintDict(dict: Table[int, int]): void =
-    for k, v in dict.pairs:
-        stdout.write myIntToString(k) & "->" & myIntToString(v) & " "
-    echo ""
-
-myPrintString("Hello, World!")
-myPrintString(myIntToString(myStringToInt("123")))
-myPrintString(myDoubleToString(myStringToDouble("123.456")))
-myPrintString(myBoolToString(false))
-myPrintString(myIntToString(myNullableToInt(myIntToNullable(18))))
-myPrintString(myIntToString(myNullableToInt(myIntToNullable(-15))))
-myPrintString(myIntToString(myNullableToInt(myIntToNullable(0))))
-myPrintStringList(myListSorted(@["e", "dddd", "ccccc", "bb", "aaa"]))
-myPrintStringList(myListSortedByLength(@["e", "dddd", "ccccc", "bb", "aaa"]))
-myPrintString(myIntToString(myListReduce(myListMap(myListFilter(@[3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))))
-myPrintString(myIntToString(myListOperations(@[3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))
-myPrintDict(myListToDict(@[3, 1, 4, 2, 5, 9, 8, 6, 7, 0]))
-myPrintIntList(myDictToList({3: 9, 1: 1, 4: 16, 2: 4, 5: 25, 9: 81, 8: 64, 6: 36, 7: 49, 0: 0}.toTable))
+var tfs = stringify(true, "bool") & "\n" &
+    stringify(3, "int") & "\n" &
+    stringify(3.141592653, "double") & "\n" &
+    stringify(3.0, "double") & "\n" &
+    stringify("Hello, World!", "str") & "\n" &
+    stringify("!@#$%^&*()\\\"\n\t", "str") & "\n" &
+    stringify(@[1, 2, 3], "list<int>") & "\n" &
+    stringify(@[true, false, true], "list<bool>") & "\n" &
+    stringify(@[3, 2, 1], "ulist<int>") & "\n" &
+    stringify({1: "one", 2: "two"}.toTable, "dict<int,str>") & "\n" &
+    stringify({"one": @[1, 2, 3], "two": @[4, 5, 6]}.toTable, "dict<str,list<int>>") & "\n" &
+    stringify(none(int), "option<int>") & "\n" &
+    stringify(some(3), "option<int>") & "\n"
+writeFile("stringify.out", tfs)

@@ -1,0 +1,13 @@
+true:bool
+3:int
+3.141593:double
+3.0:double
+"Hello, World!":str
+"!@#$%^&*()\\\"\n\t":str
+[1, 2, 3]:list<int>
+[true, false, true]:list<bool>
+[1, 2, 3]:ulist<int>
+{1=>"one", 2=>"two"}:dict<int,str>
+{"one"=>[1, 2, 3], "two"=>[4, 5, 6]}:dict<str,list<int>>
+null:option<int>
+3:option<int>

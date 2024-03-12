@@ -1,103 +1,169 @@
-function myStringToInt(s: string): number {
-    return parseInt(s);
+import * as fs from "fs";
+
+class PolyEvalType {
+    typeStr: string;
+    typeName: string;
+    valueType: PolyEvalType | null;
+    keyType: PolyEvalType | null;
+
+    constructor(typeStr, typeName, valueType, keyType) {
+        this.typeStr = typeStr;
+        this.typeName = typeName;
+        this.valueType = valueType;
+        this.keyType = keyType;
+    }
 }
 
-function myStringToDouble(s: string): number {
-    return parseFloat(s);
-}
-
-function myIntToString(i: number): string {
-    return i.toString();
-}
-
-function myDoubleToString(d: number): string {
-    return d.toFixed(6);
-}
-
-function myBoolToString(b: boolean): string {
-    return b ? "true" : "false";
-}
-
-function myIntToNullable(i: number): number | null {
-    if (i > 0) {
-        return i;
-    } else if (i < 0) {
-        return -i;
+function sToType__(typeStr) {
+    if (!typeStr.includes("<")) {
+        return new PolyEvalType(typeStr, typeStr, null, null);
     } else {
-        return null;
+        const idx = typeStr.indexOf("<");
+        const typeName = typeStr.substring(0, idx);
+        const otherStr = typeStr.substring(idx + 1, typeStr.length - 1);
+        if (!otherStr.includes(",")) {
+            const valueType = sToType__(otherStr);
+            return new PolyEvalType(typeStr, typeName, valueType, null);
+        } else {
+            const idx = otherStr.indexOf(",");
+            const keyType = sToType__(otherStr.substring(0, idx));
+            const valueType = sToType__(otherStr.substring(idx + 1));
+            return new PolyEvalType(typeStr, typeName, valueType, keyType);
+        }
     }
 }
 
-function myNullableToInt(i: number | null): number {
-    return i ?? -1;
-}
-
-function myListSorted(lst: string[]): string[] {
-    return [...lst].sort();
-}
-
-function myListSortedByLength(lst: string[]): string[] {
-    return [...lst].sort((a, b) => a.length - b.length);
-}
-
-function myListFilter(lst: number[]): number[] {
-    return lst.filter(x => x % 3 === 0);
-}
-
-function myListMap(lst: number[]): number[] {
-    return lst.map(x => x * x);
-}
-
-function myListReduce(lst: number[]): number {
-    return lst.reduce((acc, x) => acc * 10 + x, 0);
-}
-
-function myListOperations(lst: number[]): number {
-    return lst.filter(x => x % 3 === 0)
-        .map(x => x * x)
-        .reduce((acc, x) => acc * 10 + x, 0);
-}
-
-function myListToDict(lst: number[]): Map<number, number> {
-    return new Map(lst.map(x => [x, x * x]));
-}
-
-function myDictToList(dict: Map<number, number>): number[] {
-    return [...dict].sort((a, b) => a[0] - b[0]).map(x => x[0] + x[1]);
-}
-
-function myPrintString(s: string): void {
-    console.log(s);
-}
-
-function myPrintStringList(lst: string[]): void {
-    for (let x of lst) {
-        process.stdout.write(x + " ");
+function escapeString__(s) {
+    let newS = [];
+    for (let c of s) {
+        if (c === "\\") {
+            newS.push("\\\\");
+        } else if (c === "\"") {
+            newS.push("\\\"");
+        } else if (c === "\n") {
+            newS.push("\\n");
+        } else if (c === "\t") {
+            newS.push("\\t");
+        } else if (c === "\r") {
+            newS.push("\\r");
+        } else {
+            newS.push(c);
+        }
     }
-    console.log();
+    return newS.join("");
 }
 
-function myPrintIntList(lst: number[]): void {
-    myPrintStringList(lst.map(x => myIntToString(x)));
+function byBool__(value) {
+    return value ? "true" : "false";
 }
 
-function myPrintDict(dict: Map<number, number>): void {
-    for (let [k, v] of dict) {
-        process.stdout.write(myIntToString(k) + "->" + myIntToString(v) + " ");
+function byInt__(value) {
+    const v = parseInt(value);
+    return v.toString();
+}
+
+function byDouble__(value) {
+    const v = parseFloat(value);
+    let vs = v.toFixed(6);
+    while (vs.endsWith("0")) {
+        vs = vs.substring(0, vs.length - 1);
     }
-    console.log();
+    if (vs.endsWith(".")) {
+        vs += "0";
+    }
+    if (vs === "-0.0") {
+        vs = "0.0";
+    }
+    return vs;
 }
 
-myPrintString("Hello, World!");
-myPrintString(myIntToString(myStringToInt("123")));
-myPrintString(myDoubleToString(myStringToDouble("123.456")));
-myPrintString(myBoolToString(false));
-myPrintString(myIntToString(myNullableToInt(myIntToNullable(18))));
-myPrintString(myIntToString(myNullableToInt(myIntToNullable(-15))));
-myPrintString(myIntToString(myNullableToInt(myIntToNullable(0))));
-myPrintStringList(myListSorted(["e", "dddd", "ccccc", "bb", "aaa"]));
-myPrintStringList(myListSortedByLength(["e", "dddd", "ccccc", "bb", "aaa"]));
-myPrintString(myIntToString(myListReduce(myListMap(myListFilter([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))));
-myPrintString(myIntToString(myListOperations([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])));
-myPrintDict(myListToDict([3, 1, 4, 2, 5, 9, 8, 6, 7, 0]));
-myPrintIntList(myDictToList(new Map([[3, 9], [1, 1], [4, 16], [2, 4], [5, 25], [9, 81], [8, 64], [6, 36], [7, 49], [0, 0]])));
+function byString__(value) {
+    return '"' + escapeString__(value) + '"';
+}
+
+function byList__(value, t) {
+    const vStrs = value.map((v) => valToS__(v, t.valueType));
+    return "[" + vStrs.join(", ") + "]";
+}
+
+function byUlist__(value, t) {
+    const vStrs = value.map((v) => valToS__(v, t.valueType));
+    return "[" + vStrs.sort().join(", ") + "]";
+}
+
+function byDict__(value, t) {
+    const vStrs = [...value].map(([key, val]) => valToS__(key, t.keyType) + "=>" + valToS__(val, t.valueType));
+    return "{" + vStrs.sort().join(", ") + "}";
+}
+
+function byOption__(value, t) {
+    if (value === null) {
+        return "null";
+    } else {
+        return valToS__(value, t.valueType);
+    }
+}
+
+function valToS__(value, t) {
+    const typeName = t.typeName;
+    if (typeName === "bool") {
+        if (typeof value !== "boolean") {
+            throw new Error("Type mismatch");
+        }
+        return byBool__(value);
+    } else if (typeName === "int") {
+        if (typeof value !== "number" && !Number.isInteger(value)) {
+            throw new Error("Type mismatch");
+        }
+        return byInt__(value);
+    } else if (typeName === "double") {
+        if (typeof value !== "number") {
+            throw new Error("Type mismatch");
+        }
+        return byDouble__(value);
+    } else if (typeName === "str") {
+        if (typeof value !== "string") {
+            throw new Error("Type mismatch");
+        }
+        return byString__(value);
+    } else if (typeName === "list") {
+        if (!Array.isArray(value)) {
+            throw new Error("Type mismatch");
+        }
+        return byList__(value, t);
+    } else if (typeName === "ulist") {
+        if (!Array.isArray(value)) {
+            throw new Error("Type mismatch");
+        }
+        return byUlist__(value, t);
+    } else if (typeName === "dict") {
+        if (!(value instanceof Map)) {
+            throw new Error("Type mismatch");
+        }
+        return byDict__(value, t);
+    } else if (typeName === "option") {
+        return byOption__(value, t);
+    }
+    throw new Error(`Unknown type ${typeName}`);
+}
+
+function stringify__(value, typeStr) {
+    return valToS__(value, sToType__(typeStr)) + ":" + typeStr;
+}
+
+let tfs = stringify__(true, "bool") + "\n"
+    + stringify__(3, "int") + "\n"
+    + stringify__(3.141592653, "double") + "\n"
+    + stringify__(3.0, "double") + "\n"
+    + stringify__("!@#$%^&*()\n\t", "str") + "\n"
+    + stringify__("Hello, World!", "str") + "\n"
+    + stringify__([1, 2, 3], "list<int>") + "\n"
+    + stringify__([1, 2, 3], "list<int>") + "\n"
+    + stringify__([true, false, true], "list<bool>") + "\n"
+    + stringify__([3, 2, 1], "ulist<int>") + "\n"
+    + stringify__(new Map([[1, "one"], [2, "two"]]), "dict<int,str>") + "\n"
+    + stringify__(new Map([["one", [1, 2, 3]], ["two", [4, 5, 6]]]), "dict<str,list<int>>") + "\n"
+    + stringify__(null, "option<int>") + "\n"
+    + stringify__(3, "option<int>") + "\n";
+
+fs.writeFileSync("stringify.out", tfs);

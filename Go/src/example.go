@@ -1,168 +1,207 @@
 package main
-
 import (
-	"fmt"
-	"strconv"
-	"slices"
-    "cmp"
+    "fmt"
+    "os"
+    "sort"
+    "strings"
+    "reflect"
 )
 
-func MyStringToInt(s string) int {
-    i, _ := strconv.Atoi(s)
-    return i
+type PolyEvalType struct {
+    typeStr   string
+    typeName  string
+    valueType *PolyEvalType
+    keyType   *PolyEvalType
 }
 
-func MyStringToDouble(s string) float64 {
-    d, _ := strconv.ParseFloat(s, 64)
-    return d
+func NewPolyEvalType__(typeStr string, typeName string, valueType *PolyEvalType, keyType *PolyEvalType) *PolyEvalType {
+    return &PolyEvalType{typeStr, typeName, valueType, keyType}
 }
 
-func MyIntToString(i int) string {
-    return strconv.Itoa(i)
+func SToType__(typeStr string) *PolyEvalType {
+    if !strings.Contains(typeStr, "<") {
+        return NewPolyEvalType__(typeStr, typeStr, nil, nil)
+    } else {
+        idx := strings.Index(typeStr, "<")
+        typeName := typeStr[:idx]
+        otherStr := typeStr[idx+1 : len(typeStr)-1]
+        if !strings.Contains(otherStr, ",") {
+            valueType := SToType__(otherStr)
+            return NewPolyEvalType__(typeStr, typeName, valueType, nil)
+        } else {
+            idx = strings.Index(otherStr, ",")
+            keyType := SToType__(otherStr[:idx])
+            valueType := SToType__(otherStr[idx+1:])
+            return NewPolyEvalType__(typeStr, typeName, valueType, keyType)
+        }
+    }
 }
 
-func MyDoubleToString(d float64) string {
-    return fmt.Sprintf("%.6f", d)
+func EscapeString__(s string) string {
+    newS := make([]string, 0)
+    for _, c := range s {
+        if c == '\\' {
+            newS = append(newS, "\\\\")
+        } else if c == '"' {
+            newS = append(newS, "\\\"")
+        } else if c == '\n' {
+            newS = append(newS, "\\n")
+        } else if c == '\t' {
+            newS = append(newS, "\\t")
+        } else if c == '\r' {
+            newS = append(newS, "\\r")
+        } else {
+            newS = append(newS, string(c))
+        }
+    }
+    return strings.Join(newS, "")
 }
 
-func MyBoolToString(b bool) string {
-    if b {
+func byBool__(value bool) string {
+    if value {
         return "true"
     } else {
         return "false"
     }
 }
 
-func MyIntToNullable(i int) *int {
-    tmp := new(int)
-    if i > 0 {
-        *tmp = i
-    } else if i < 0 {
-        *tmp = -i
-    } else {
-        tmp = nil
+func byInt__(value int) string {
+    return fmt.Sprintf("%d", value)
+}
+
+func byDouble__(value float64) string {
+    vs := fmt.Sprintf("%.6f", value)
+    for strings.HasSuffix(vs, "0") {
+        vs = vs[:len(vs)-1]
     }
-    return tmp
-}
-
-func MyNullableToInt(i *int) int {
-    if i == nil {
-        return -1
-    } else {
-        return *i
+    if strings.HasSuffix(vs, ".") {
+        vs += "0"
     }
+    if vs == "-0.0" {
+        vs = "0.0"
+    }
+    return vs
 }
 
-func MyListSorted(lst []string) []string {
-    tmp := slices.Clone(lst)
-    slices.Sort(tmp)
-    return tmp
+func byString__(value string) string {
+    return "\"" + EscapeString__(value) + "\""
 }
 
-func MyListSortedByLength(lst []string) []string {
-    tmp := slices.Clone(lst)
-    slices.SortFunc(tmp, func(a, b string) int {
-        return cmp.Compare(len(a), len(b))
-    })
-    return tmp
+func byList__(value []interface{}, ty *PolyEvalType) string {
+    vStrs := make([]string, 0)
+    for _, v := range value {
+        vStrs = append(vStrs, valToS(v, ty.valueType))
+    }
+    return "[" + strings.Join(vStrs, ", ") + "]"
 }
 
-func MyListFilter(lst []int) []int {
-    tmp := []int{}
-    for _, x := range lst {
-        if x % 3 == 0 {
-            tmp = append(tmp, x)
+func byUlist__(value []interface{}, ty *PolyEvalType) string {
+    vStrs := make([]string, 0)
+    for _, v := range value {
+        vStrs = append(vStrs, valToS(v, ty.valueType))
+    }
+    sort.Strings(vStrs)
+    return "[" + strings.Join(vStrs, ", ") + "]"
+}
+
+func byDict__(value map[interface{}]interface{}, ty *PolyEvalType) string {
+    vStrs := make([]string, 0)
+    for key, val := range value {
+        vStrs = append(vStrs, valToS(key, ty.keyType)+"=>"+valToS(val, ty.valueType))
+    }
+    sort.Strings(vStrs)
+    return "{" + strings.Join(vStrs, ", ") + "}"
+}
+
+func byOption__(value interface{}, ty *PolyEvalType) string {
+    if value == nil {
+        return "null"
+    } else if reflect.TypeOf(value).Kind() != reflect.Ptr {
+        panic("Type mismatch")
+    }
+    ptrValue := reflect.ValueOf(value)
+    ptr := ptrValue.Elem().Interface()
+    return valToS(ptr, ty.valueType)
+}
+
+func valToS(value interface{}, ty *PolyEvalType) string {
+    typeName := ty.typeName
+    if typeName == "bool" {
+        if _, ok := value.(bool); !ok {
+            panic("Type mismatch")
         }
-    }
-    return tmp
-}
-
-func MyListMap(lst []int) []int {
-    tmp := []int{}
-    for _, x := range lst {
-        tmp = append(tmp, x * x)
-    }
-    return tmp
-}
-
-func MyListReduce(lst []int) int {
-    tmp := 0
-    for _, x := range lst {
-        tmp = tmp * 10 + x
-    }
-    return tmp
-}
-
-func MyListOperations(lst []int) int {
-    tmp := 0
-    for _, x := range lst {
-        if x % 3 == 0 {
-            tmp = tmp * 10 + x * x
+        return byBool__(value.(bool))
+    } else if typeName == "int" {
+        if _, ok := value.(int); !ok {
+            panic("Type mismatch")
         }
+        return byInt__(value.(int))
+    } else if typeName == "double" {
+        if _, ok := value.(float64); !ok {
+            panic("Type mismatch")
+        }
+        return byDouble__(value.(float64))
+    } else if typeName == "str" {
+        if _, ok := value.(string); !ok {
+            panic("Type mismatch")
+        }
+        return byString__(value.(string))
+    } else if typeName == "list" {
+        if reflect.TypeOf(value).Kind() != reflect.Slice {
+            panic("Type mismatch")
+        }
+        sliceValue := reflect.ValueOf(value)
+        interfaceSlice := make([]interface{}, sliceValue.Len())
+        for i := 0; i < sliceValue.Len(); i++ {
+            interfaceSlice[i] = sliceValue.Index(i).Interface()
+        }
+        return byList__(interfaceSlice, ty)
+    } else if typeName == "ulist" {
+        if reflect.TypeOf(value).Kind() != reflect.Slice {
+            panic("Type mismatch")
+        }
+        sliceValue := reflect.ValueOf(value)
+        interfaceSlice := make([]interface{}, sliceValue.Len())
+        for i := 0; i < sliceValue.Len(); i++ {
+            interfaceSlice[i] = sliceValue.Index(i).Interface()
+        }
+        return byUlist__(interfaceSlice, ty)
+    } else if typeName == "dict" {
+        if reflect.TypeOf(value).Kind() != reflect.Map {
+            panic("Type mismatch")
+        }
+        mapValue := reflect.ValueOf(value)
+        interfaceMap := make(map[interface{}]interface{})
+        for _, key := range mapValue.MapKeys() {
+            interfaceMap[key.Interface()] = mapValue.MapIndex(key).Interface()
+        }
+        return byDict__(interfaceMap, ty)
+    } else if typeName == "option" {
+        return byOption__(value, ty)
+    } else {
+        panic(fmt.Sprintf("Unknown type %s", typeName))
     }
-    return tmp
 }
 
-func MyListToDict(lst []int) map[int]int {
-    tmp := make(map[int]int)
-    for _, x := range lst {
-        tmp[x] = x * x
-    }
-    return tmp
-}
-
-func MyDictToList(dict map[int]int) []int {
-    keys := []int{}
-    for k, _ := range dict {
-        keys = append(keys, k)
-    }
-    slices.Sort(keys)
-    tmp := []int{}
-    for _, k := range keys {
-        tmp = append(tmp, k + dict[k])
-    }
-    return tmp
-}
-
-func MyPrintString(s string) {
-    fmt.Println(s)
-}
-
-func MyPrintStringList(lst []string) {
-    for _, x := range lst {
-        fmt.Print(x + " ")
-    }
-    fmt.Println()
-}
-
-func MyPrintIntList(lst []int) {
-    tmp := []string{}
-    for _, x := range lst {
-        tmp = append(tmp, MyIntToString(x))
-    }
-    MyPrintStringList(tmp)
-}
-
-func MyPrintDict(dict map[int]int) {
-    tmp := []string{}
-    for k, v := range dict {
-        tmp = append(tmp, MyIntToString(k) + "->" + MyIntToString(v))
-    }
-    MyPrintStringList(tmp)
+func stringify__(value interface{}, typeStr string) string {
+    return valToS(value, SToType__(typeStr)) + ":" + typeStr
 }
 
 func main() {
-    MyPrintString("Hello, World!")
-    MyPrintString(MyIntToString(MyStringToInt("123")))
-    MyPrintString(MyDoubleToString(MyStringToDouble("123.456")))
-    MyPrintString(MyBoolToString(false))
-    MyPrintString(MyIntToString(MyNullableToInt(MyIntToNullable(18))))
-    MyPrintString(MyIntToString(MyNullableToInt(MyIntToNullable(-15))))
-    MyPrintString(MyIntToString(MyNullableToInt(MyIntToNullable(0))))
-    MyPrintStringList(MyListSorted([]string{"e", "dddd", "ccccc", "bb", "aaa"}))
-    MyPrintStringList(MyListSortedByLength([]string{"e", "dddd", "ccccc", "bb", "aaa"}))
-    MyPrintString(MyIntToString(MyListReduce(MyListMap(MyListFilter([]int{3, 12, 5, 8, 9, 15, 7, 17, 21, 11})))))
-    MyPrintString(MyIntToString(MyListOperations([]int{3, 12, 5, 8, 9, 15, 7, 17, 21, 11})))
-    MyPrintDict(MyListToDict([]int{3, 1, 4, 2, 5, 9, 8, 6, 7, 0}))
-    MyPrintIntList(MyDictToList(map[int]int{3: 9, 1: 1, 4: 16, 2: 4, 5: 25, 9: 81, 8: 64, 6: 36, 7: 49, 0: 0}))
+    tfs := stringify__(true, "bool") + "\n" +
+          stringify__(3, "int") + "\n" +
+          stringify__(3.141592653, "double") + "\n" +
+          stringify__(3.0, "double") + "\n" +
+          stringify__("Hello, World!", "str") + "\n" +
+          stringify__("!@#$%^&*()\\\"\n\t", "str") + "\n" +
+          stringify__([]int{1, 2, 3}, "list<int>") + "\n" +
+          stringify__([]bool{true, false, true}, "list<bool>") + "\n" +
+          stringify__([]int{3, 2, 1}, "ulist<int>") + "\n" +
+          stringify__(map[int]string{1: "one", 2: "two"}, "dict<int,str>") + "\n" +
+          stringify__(map[string][]int{"one": []int{1, 2, 3}, "two": []int{4, 5, 6}}, "dict<str,list<int>>") + "\n" +
+          stringify__(nil, "option<int>") + "\n" +
+          stringify__(&[]int{3}[0], "option<int>") + "\n"
+    f, _ := os.Create("stringify.out")
+    f.WriteString(tfs)
+    f.Close()
 }

@@ -1,107 +1,177 @@
 Module Example
-    Public Function MyStringToInt(s As String) As Integer
-        Return Integer.Parse(s)
-    End Function
+    Public Class PolyEvalType
+        Public Property type_str As String
+        Public Property type_name As String
+        Public Property value_type As PolyEvalType
+        Public Property key_type As PolyEvalType
+        Public Sub New(type_str As String, type_name As String, value_type As PolyEvalType, key_type As PolyEvalType)
+            Me.type_str = type_str
+            Me.type_name = type_name
+            Me.value_type = value_type
+            Me.key_type = key_type
+        End Sub
+    End Class
 
-    Public Function MyStringToDouble(s As String) As Double
-        Return Double.Parse(s)
-    End Function
-
-    Public Function MyIntToString(i As Integer) As String
-        Return i.ToString()
-    End Function
-
-    Public Function MyDoubleToString(d As Double) As String
-        Return d.ToString("N6")
-    End Function
-
-    Public Function MyBoolToString(b As Boolean) As String
-        Return If(b, "true", "false")
-    End Function
-
-    Public Function MyIntToNullable(i As Integer) As Integer?
-        If i > 0 Then
-            Return i
-        ElseIf i < 0 Then
-            Return -i
+    Public Function s_to_type__(type_str As String) As PolyEvalType
+        If Not type_str.Contains("<") Then
+            Return New PolyEvalType(type_str, type_str, Nothing, Nothing)
         Else
-            Return Nothing
+            Dim idx As Integer = type_str.IndexOf("<")
+            Dim type_name As String = type_str.Substring(0, idx)
+            Dim other_str As String = type_str.Substring(idx + 1, type_str.Length - idx - 2)
+            If Not other_str.Contains(",") Then
+                Dim value_type As PolyEvalType = s_to_type__(other_str)
+                Return New PolyEvalType(type_str, type_name, value_type, Nothing)
+            Else
+                idx = other_str.IndexOf(",")
+                Dim key_type As PolyEvalType = s_to_type__(other_str.Substring(0, idx))
+                Dim value_type As PolyEvalType = s_to_type__(other_str.Substring(idx + 1))
+                Return New PolyEvalType(type_str, type_name, value_type, key_type)
+            End If
         End If
     End Function
 
-    Public Function MyNullableToInt(i As Integer?) As Integer
-        Return If(i.HasValue, i.Value, -1)
-    End Function
-
-    Public Function MyListSorted(lst As IList(Of String)) As IList(Of String)
-        Return lst.OrderBy(Function(x) x).ToList()
-    End Function
-
-    Public Function MyListSortedByLength(lst As IList(Of String)) As IList(Of String)
-        Return lst.OrderBy(Function(x) x.Length).ToList()
-    End Function
-
-    Public Function MyListFilter(lst As IList(Of Integer)) As IList(Of Integer)
-        Return lst.Where(Function(x) x Mod 3 = 0).ToList()
-    End Function
-
-    Public Function MyListMap(lst As IList(Of Integer)) As IList(Of Integer)
-        Return lst.Select(Function(x) x * x).ToList()
-    End Function
-
-    Public Function MyListReduce(lst As IList(Of Integer)) As Integer
-        Return lst.Aggregate(0, Function(acc, x) acc * 10 + x)
-    End Function
-
-    Public Function MyListOperations(lst As IList(Of Integer)) As Integer
-        Return lst.Where(Function(x) x Mod 3 = 0).
-            Select(Function(x) x * x).
-            Aggregate(0, Function(acc, x) acc * 10 + x)
-    End Function
-
-    Public Function MyListToDict(lst As IList(Of Integer)) As IDictionary(Of Integer, Integer)
-        Return lst.ToDictionary(Function(x) x, Function(x) x * x)
-    End Function
-
-    Public Function MyDictToList(dict As IDictionary(Of Integer, Integer)) As IList(Of Integer)
-        Return dict.OrderBy(Function(x) x.Key).Select(Function(x) x.Key + x.Value).ToList()
-    End Function
-
-    Public Sub MyPrintString(s As String)
-        Console.WriteLine(s)
-    End Sub
-
-    Public Sub MyPrintStringList(lst As IList(Of String))
-        For Each x In lst
-            Console.Write(x & " ")
+    Public Function escape_string__(s As String) As String
+        Dim new_s As New List(Of String)
+        For Each c As Char In s
+            If c = "\" Then
+                new_s.Add("\\")
+            ElseIf c = """" Then
+                new_s.Add("\""")
+            ElseIf c = vbLf Then
+                new_s.Add("\n")
+            ElseIf c = vbTab Then
+                new_s.Add("\t")
+            ElseIf c = vbCr Then
+                new_s.Add("\r")
+            Else
+                new_s.Add(c)
+            End If
         Next
-        Console.WriteLine()
-    End Sub
+        Return String.Join("", new_s)
+    End Function
 
-    Public Sub MyPrintIntList(lst As IList(Of Integer))
-        MyPrintStringList(lst.Select(Function(x) MyIntToString(x)).ToList())
-    End Sub
+    Public Function by_bool__(value As Boolean) As String
+        Return If(value, "true", "false")
+    End Function
 
-    Public Sub MyPrintDict(dict As IDictionary(Of Integer, Integer))
-        For Each x In dict
-            Console.Write(MyIntToString(x.Key) & "->" & MyIntToString(x.Value) & " ")
+    Public Function by_int__(value As Integer) As String
+        Return value.ToString()
+    End Function
+
+    Public Function by_double__(value As Double) As String
+        Dim vs As String = value.ToString("F6")
+        While vs.EndsWith("0")
+            vs = vs.Substring(0, vs.Length - 1)
+        End While
+        If vs.EndsWith(".") Then
+            vs += "0"
+        End If
+        If vs = "-0.0" Then
+            vs = "0.0"
+        End If
+        Return vs
+    End Function
+
+    Public Function by_string__(value As String) As String
+        Return """" & escape_string__(value) & """"
+    End Function
+
+    Public Function by_list__(value As List(Of Object), ty As PolyEvalType) As String
+        Dim v_strs As New List(Of String)
+        For Each v As Object In value
+            v_strs.Add(val_to_s__(v, ty.value_type))
         Next
-        Console.WriteLine()
-    End Sub
+        Return "[" & String.Join(", ", v_strs) & "]"
+    End Function
 
-    Public Sub Main()
-        MyPrintString("Hello, World!")
-        MyPrintString(MyIntToString(MyStringToInt("123")))
-        MyPrintString(MyDoubleToString(MyStringToDouble("123.456")))
-        MyPrintString(MyBoolToString(False))
-        MyPrintString(MyIntToString(MyNullableToInt(MyIntToNullable(18))))
-        MyPrintString(MyIntToString(MyNullableToInt(MyIntToNullable(-15))))
-        MyPrintString(MyIntToString(MyNullableToInt(MyIntToNullable(0))))
-        MyPrintStringList(MyListSorted(New List(Of String) From {"e", "dddd", "ccccc", "bb", "aaa"}))
-        MyPrintStringList(MyListSortedByLength(New List(Of String) From {"e", "dddd", "ccccc", "bb", "aaa"}))
-        MyPrintString(MyIntToString(MyListReduce(MyListMap(MyListFilter(New List(Of Integer) From {3, 12, 5, 8, 9, 15, 7, 17, 21, 11})))))
-        MyPrintString(MyIntToString(MyListOperations(New List(Of Integer) From {3, 12, 5, 8, 9, 15, 7, 17, 21, 11})))
-        MyPrintDict(MyListToDict(New List(Of Integer) From {3, 1, 4, 2, 5, 9, 8, 6, 7, 0}))
-        MyPrintIntList(MyDictToList(New Dictionary(Of Integer, Integer) From {{3, 9}, {1, 1}, {4, 16}, {2, 4}, {5, 25}, {9, 81}, {8, 64}, {6, 36}, {7, 49}, {0, 0}}))
+    Public Function by_ulist__(value As List(Of Object), ty As PolyEvalType) As String
+        Dim v_strs As New List(Of String)
+        For Each v As Object In value
+            v_strs.Add(val_to_s__(v, ty.value_type))
+        Next
+        v_strs.Sort()
+        Return "[" & String.Join(", ", v_strs) & "]"
+    End Function
+
+    Public Function by_dict__(value As Dictionary(Of Object, Object), ty As PolyEvalType) As String
+        Dim v_strs As New List(Of String)
+        For Each kvp As KeyValuePair(Of Object, Object) In value
+            v_strs.Add(val_to_s__(kvp.Key, ty.key_type) & "=>" & val_to_s__(kvp.Value, ty.value_type))
+        Next
+        v_strs.Sort()
+        Return "{" & String.Join(", ", v_strs) & "}"
+    End Function
+
+    Public Function by_option__(value As Object, ty As PolyEvalType) As String
+        If value Is Nothing Then
+            Return "null"
+        Else
+            Return val_to_s__(value, ty.value_type)
+        End If
+    End Function
+
+    Public Function val_to_s__(value As Object, ty As PolyEvalType) As String
+        Dim type_name As String = ty.type_name
+        If type_name = "bool" Then
+            If Not TypeOf value Is Boolean Then
+                Throw New Exception("Type mismatch")
+            End If
+            Return by_bool__(value)
+        ElseIf type_name = "int" Then
+            If Not TypeOf value Is Integer Then
+                Throw New Exception("Type mismatch")
+            End If
+            Return by_int__(value)
+        ElseIf type_name = "double" Then
+            If Not TypeOf value Is Integer AndAlso Not TypeOf value Is Double Then
+                Throw New Exception("Type mismatch")
+            End If
+            Return by_double__(value)
+        ElseIf type_name = "str" Then
+            If Not TypeOf value Is String Then
+                Throw New Exception("Type mismatch")
+            End If
+            Return by_string__(value)
+        ElseIf type_name = "list" Then
+            If Not TypeOf value Is List(Of Object) Then
+                Throw New Exception("Type mismatch")
+            End If
+            Return by_list__(value, ty)
+        ElseIf type_name = "ulist" Then
+            If Not TypeOf value Is List(Of Object) Then
+                Throw New Exception("Type mismatch")
+            End If
+            Return by_ulist__(value, ty)
+        ElseIf type_name = "dict" Then
+            If Not TypeOf value Is Dictionary(Of Object, Object) Then
+                Throw New Exception("Type mismatch")
+            End If
+            Return by_dict__(value, ty)
+        ElseIf type_name = "option" Then
+            Return by_option__(value, ty)
+        End If
+        Throw New Exception("Unknown type " & type_name)
+    End Function
+
+    Public Function stringify__(value As Object, type_str As String) As String
+        Return val_to_s__(value, s_to_type__(type_str)) & ":" & type_str
+    End Function
+
+    Sub Main()
+        Dim tfs As String = stringify__(True, "bool") & vbLf &
+            stringify__(3, "int") & vbLf &
+            stringify__(3.141592653, "double") & vbLf &
+            stringify__(3.0, "double") & vbLf &
+            stringify__("Hello, World!", "str") & vbLf &
+            stringify__("!@#$%^&*()\" & """" & vbLf & vbTab, "str") & vbLf &
+            stringify__(New List(Of Object) From {1, 2, 3}, "list<int>") & vbLf &
+            stringify__(New List(Of Object) From {True, False, True}, "list<bool>") & vbLf &
+            stringify__(New List(Of Object) From {3, 2, 1}, "ulist<int>") & vbLf &
+            stringify__(New Dictionary(Of Object, Object) From {{1, "one"}, {2, "two"}}, "dict<int,str>") & vbLf &
+            stringify__(New Dictionary(Of Object, Object) From {{"one", New List(Of Object) From {1, 2, 3}}, {"two", New List(Of Object) From {4, 5, 6}}}, "dict<str,list<int>>") & vbLf &
+            stringify__(Nothing, "option<int>") & vbLf &
+            stringify__(3, "option<int>") & vbLf
+        System.IO.File.WriteAllText("stringify.out", tfs)
     End Sub
 End Module

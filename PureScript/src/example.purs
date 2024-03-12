@@ -1,130 +1,158 @@
 module Example where
 
 import Prelude 
-import Effect (Effect)
-import Effect.Console as Console
-import Data.Int as Int
-import Data.Number as Number
-import Data.Number.Format (toStringWith, fixed)
-import Data.String as String
-import Data.Maybe (Maybe(..))
 import Data.Array as Array
+import Data.String as String
+import Data.String.CodeUnits as CodeUnits
+import Data.Number.Format (toStringWith, fixed)
+import Effect (Effect)
 import Data.Map (Map)
 import Data.Map as Map
+import Data.Maybe (Maybe(..), isNothing)
 import Data.Tuple (Tuple(..))
-import Data.Foldable (for_, foldl)
-import Data.FoldableWithIndex (forWithIndex_)
+import Node.Encoding (Encoding(..))
+import Node.FS.Sync (writeTextFile)
+import Partial.Unsafe (unsafeCrashWith)
 
-import Node.Encoding (Encoding(UTF8))
-import Node.Process (stdout)
-import Node.Stream (writeString)
+fromJust__ :: forall a. Maybe a -> a
+fromJust__ x = case x of
+  Nothing -> unsafeCrashWith "unsafeCrash"
+  Just a -> a
 
-myStringToInt :: String -> Int
-myStringToInt s =
-    case Int.fromString s of
-        Just x -> x
-        Nothing -> -1
+newtype PolyEvalType = PolyEvalType
+    { typeStr :: String, typeName :: String, valueType :: Maybe PolyEvalType, keyType :: Maybe PolyEvalType }
 
-myStringToDouble :: String -> Number
-myStringToDouble s =
-    case Number.fromString s of
-        Just x -> x
-        Nothing -> -1.0
+newPolyEvalType__ :: String -> String -> Maybe PolyEvalType -> Maybe PolyEvalType -> PolyEvalType
+newPolyEvalType__ typeStr typeName valueType keyType =
+    PolyEvalType { typeStr : typeStr, typeName, valueType, keyType }
+    
+getTypeStr__ :: PolyEvalType -> String
+getTypeStr__ (PolyEvalType { typeStr }) = typeStr
 
-myIntToString :: Int -> String
-myIntToString i = 
-    show i
+getTypeName__ :: PolyEvalType -> String
+getTypeName__ (PolyEvalType { typeName }) = typeName
 
-myDoubleToString :: Number -> String
-myDoubleToString d = 
-    toStringWith (fixed 6) d
+getValueType__ :: PolyEvalType -> Maybe PolyEvalType
+getValueType__ (PolyEvalType { valueType }) = valueType
 
-myBoolToString :: Boolean -> String
-myBoolToString b = 
-    if b then "true" else "false"
+getKeyType__ :: PolyEvalType -> Maybe PolyEvalType
+getKeyType__ (PolyEvalType { keyType }) = keyType
 
-myIntToNullable :: Int -> Maybe Int
-myIntToNullable i = 
-    if i > 0 then Just i
-    else if i < 0 then Just (-i)
-    else Nothing
 
-myNullableToInt :: Maybe Int -> Int
-myNullableToInt i = 
-    case i of
-        Just x -> x
-        Nothing -> -1
+sToType__ :: String -> PolyEvalType
+sToType__ typeStr = 
+    if String.contains (String.Pattern "<") typeStr then
+        let idx = fromJust__ (String.indexOf (String.Pattern "<") typeStr)
+            typeName = CodeUnits.slice 0 idx typeStr
+            otherStr = CodeUnits.slice (idx + 1) (-1) typeStr
+        in if String.contains (String.Pattern ",") otherStr then
+            let idx = fromJust__ (String.indexOf (String.Pattern ",") otherStr)
+                keyType = sToType__ $ CodeUnits.slice 0 idx otherStr
+                valueType = sToType__ $ CodeUnits.slice (idx + 1) (String.length otherStr) otherStr
+            in newPolyEvalType__ typeStr typeName (Just valueType) (Just keyType)
+        else
+            let valueType = sToType__ otherStr
+            in newPolyEvalType__ typeStr typeName (Just valueType) Nothing
+    else
+        newPolyEvalType__ typeStr typeStr Nothing Nothing
 
-myListSorted :: Array String -> Array String
-myListSorted lst = 
-    Array.sort lst
+class ValToS__ a where  
+    valToS__ :: a -> PolyEvalType -> String
 
-myListSortedByLength :: Array String -> Array String
-myListSortedByLength lst = 
-    Array.sortBy (\x y -> (String.length x) `compare` (String.length y)) lst
+escapeString__ :: String -> String
+escapeString__ s = 
+    s # CodeUnits.toCharArray # map (\c -> 
+            if c == '\\' then "\\\\"
+            else if c == '\"' then "\\\""
+            else if c == '\n' then "\\n"
+            else if c == '\t' then "\\t"
+            else if c == '\t' then "\\t"
+            else if c == '\r' then "\\r"
+            else CodeUnits.fromCharArray [c]
+        ) # String.joinWith ""
 
-myListFilter :: Array Int -> Array Int
-myListFilter lst = 
-    Array.filter (\x -> x `mod` 3 == 0) lst
+byBool__ :: Boolean -> String
+byBool__ value = 
+    if value then "true" else "false"
 
-myListMap :: Array Int -> Array Int
-myListMap lst = 
-    map (\x -> x * x) lst
+byInt__ :: Int -> String
+byInt__ value = 
+    show value
 
-myListReduce :: Array Int -> Int
-myListReduce lst = 
-    foldl (\acc x -> acc * 10 + x) 0 lst
+byDouble__ :: Number -> String
+byDouble__ value = 
+    toStringWith (fixed 6) value
 
-myListOperations :: Array Int -> Int
-myListOperations lst = 
-    lst # Array.filter (\x -> x `mod` 3 == 0)
-        # map (\x -> x * x)
-        # foldl (\acc x -> acc * 10 + x) 0
+byString__ :: String -> String
+byString__ value = 
+    "\"" <> escapeString__ value <> "\""
 
-myListToDict :: Array Int -> Map Int Int
-myListToDict lst = 
-    Map.fromFoldable (map (\x -> Tuple x (x * x)) lst)
+byList__ :: forall a. (ValToS__ a) => Array a -> PolyEvalType -> String
+byList__ value ty =
+    let vStrs = value # map (\v -> valToS__ v (fromJust__ (getValueType__ ty))) 
+    in "[" <> String.joinWith ", " vStrs <> "]"
 
-myDictToList :: Map Int Int -> Array Int
-myDictToList dict = 
-    dict # (Map.toUnfoldable :: forall k v. Map k v -> Array (Tuple k v))
-         # Array.sortBy (\(Tuple k1 _) (Tuple k2 _) -> k1 `compare` k2) # map (\(Tuple k v) -> k + v)
+byUList__ :: forall a. (ValToS__ a) => Array a -> PolyEvalType -> String
+byUList__ value ty = 
+    let vStrs = value # map (\v -> valToS__ v (fromJust__ (getValueType__ ty))) 
+    in "[" <> String.joinWith ", " (Array.sort vStrs) <> "]"
 
-myPrintString :: String -> Effect Unit
-myPrintString s = 
-    Console.log s
+byDict__ :: forall a. (ValToS__ a) => forall b. (ValToS__ b) => Map a b -> PolyEvalType -> String
+byDict__ value ty = 
+    let vStrs = (Map.toUnfoldable :: forall k v. Map k v -> Array (Tuple k v)) value # map (\(Tuple key val) -> (valToS__ key (fromJust__ (getKeyType__ ty))) <> "=>" <> (valToS__ val (fromJust__ (getValueType__ ty))))
+    in "{" <> String.joinWith ", " (Array.sort vStrs) <> "}"
 
-myPrintStringList :: Array String -> Effect Unit
-myPrintStringList lst = 
-    do
-    for_ lst (\x -> 
-        void $ writeString stdout UTF8 (x <> " "))
-    Console.log ""
+byOption__ :: forall a. (ValToS__ a) => Maybe a -> PolyEvalType -> String
+byOption__ value ty = 
+    if isNothing value then "null" else valToS__ (fromJust__ value) (fromJust__ (getValueType__ ty))
 
-myPrintIntList :: Array Int -> Effect Unit
-myPrintIntList lst = 
-    myPrintStringList $ map (\x -> myIntToString x) lst
+instance valToSBool :: ValToS__ Boolean where
+    valToS__ value ty = 
+        if ((getTypeName__ ty)) == "bool" then byBool__ value else unsafeCrashWith "Type mismatch"
+    
+instance valToSInt :: ValToS__ Int where
+    valToS__ value ty = 
+        if (getTypeName__ ty) == "int" then byInt__ value else unsafeCrashWith "Type mismatch"
 
-myPrintDict :: Map Int Int -> Effect Unit
-myPrintDict dict = 
-    do
-    forWithIndex_ dict (\k v -> 
-        void $ writeString stdout UTF8 (myIntToString k <> "->" <> myIntToString v <> " "))
-    Console.log ""
+instance valToSDouble :: ValToS__ Number where
+    valToS__ value ty = 
+        if (getTypeName__ ty) == "double" then byDouble__ value else unsafeCrashWith "Type mismatch"
+    
+instance valToSString :: ValToS__ String where
+    valToS__ value ty = 
+        if (getTypeName__ ty) == "str" then byString__ value else unsafeCrashWith "Type mismatch"
+
+instance valToSList :: (ValToS__ a) => ValToS__ (Array a) where
+    valToS__ value ty = 
+        if (getTypeName__ ty) == "list" then byList__ value ty 
+        else if (getTypeName__ ty) == "ulist" then byUList__ value ty 
+        else unsafeCrashWith "Type mismatch"
+
+instance valToSDict :: (ValToS__ a, ValToS__ b) => ValToS__ (Map a b) where
+    valToS__ value ty = 
+        if (getTypeName__ ty) == "dict" then byDict__ value ty else unsafeCrashWith "Type mismatch"
+
+instance valToSOption :: (ValToS__ a) => ValToS__ (Maybe a) where
+    valToS__ value ty = 
+        if (getTypeName__ ty) == "option" then byOption__ value ty else unsafeCrashWith "Type mismatch"
+
+stringify__ :: forall a. (ValToS__ a) => a -> String -> String
+stringify__ value typeStr = 
+    valToS__ value (sToType__ typeStr) <> ":" <> typeStr
 
 main :: Effect Unit
 main = 
-    do
-    myPrintString "Hello, World!"
-    myPrintString $ myIntToString $ myStringToInt "123"
-    myPrintString $ myDoubleToString $ myStringToDouble "123.456"
-    myPrintString $ myBoolToString false
-    myPrintString $ myIntToString $ myNullableToInt $ myIntToNullable 18
-    myPrintString $ myIntToString $ myNullableToInt $ myIntToNullable (-15)
-    myPrintString $ myIntToString $ myNullableToInt $ myIntToNullable 0
-    myPrintStringList $ myListSorted ["e", "dddd", "ccccc", "bb", "aaa"]
-    myPrintStringList $ myListSortedByLength ["e", "dddd", "ccccc", "bb", "aaa"]
-    myPrintString $ myIntToString $ myListReduce $ myListMap $ myListFilter [3, 12, 5, 8, 9, 15, 7, 17, 21, 11]
-    myPrintString $ myIntToString $ myListOperations [3, 12, 5, 8, 9, 15, 7, 17, 21, 11]
-    myPrintDict $ myListToDict [3, 1, 4, 2, 5, 9, 8, 6, 7, 0]
-    myPrintIntList $ myDictToList $ Map.fromFoldable [Tuple 3 9, Tuple 1 1, Tuple 4 16, Tuple 2 4, Tuple 5 25, Tuple 9 81, Tuple 8 64, Tuple 6 36, Tuple 7 49, Tuple 0 0]
+    let tfs = stringify__ true "bool" <> "\n" 
+            <> stringify__ 3 "int" <> "\n" 
+            <> stringify__ 3.141592653 "double" <> "\n" 
+            <> stringify__ 3.0 "double" <> "\n" 
+            <> stringify__ "Hello, World!" "str" <> "\n" 
+            <> stringify__ "!@#$%^&*()\\\"\n\t" "str" <> "\n" 
+            <> stringify__ [1, 2, 3] "list<int>" <> "\n" 
+            <> stringify__ [true, false, true] "list<bool>" <> "\n" 
+            <> stringify__ [3, 2, 1] "ulist<int>" <> "\n" 
+            <> stringify__ (Map.fromFoldable [Tuple 1 "one", Tuple 2 "two"]) "dict<int,str>" <> "\n" 
+            <> stringify__ (Map.fromFoldable [Tuple "one" [1, 2, 3], Tuple "two" [4, 5, 6]]) "dict<str,list<int>>" <> "\n" 
+            <> stringify__ (Nothing :: Maybe Boolean) "option<int>" <> "\n" 
+            <> stringify__ (Just 3) "option<int>" <> "\n"
+    in writeTextFile UTF8 "stringify.out" tfs

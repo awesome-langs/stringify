@@ -8,6 +8,7 @@ workspace:
         - integers
         - lists
         - maybe
+        - node-fs
         - node-process
         - numbers
         - ordered-collections
@@ -38,15 +39,19 @@ workspace:
         - identity
         - integers
         - invariant
+        - js-date
         - lazy
         - lists
         - maybe
         - newtype
         - node-buffer
         - node-event-emitter
+        - node-fs
+        - node-path
         - node-process
         - node-streams
         - nonempty
+        - now
         - nullable
         - numbers
         - ordered-collections
@@ -802,6 +807,17 @@ packages:
     dependencies:
       - control
       - prelude
+  js-date:
+    type: registry
+    version: 8.0.0
+    integrity: sha256-6TVF4DWg5JL+jRAsoMssYw8rgOVALMUHT1CuNZt8NRo=
+    dependencies:
+      - datetime
+      - effect
+      - exceptions
+      - foreign
+      - integers
+      - now
   lazy:
     type: registry
     version: 6.0.0
@@ -867,6 +883,34 @@ packages:
       - nullable
       - prelude
       - unsafe-coerce
+  node-fs:
+    type: registry
+    version: 9.1.0
+    integrity: sha256-TzhvGdrwcM0bazDvrWSqh+M/H8GKYf1Na6aGm2Qg4+c=
+    dependencies:
+      - datetime
+      - effect
+      - either
+      - enums
+      - exceptions
+      - functions
+      - integers
+      - js-date
+      - maybe
+      - node-buffer
+      - node-path
+      - node-streams
+      - nullable
+      - partial
+      - prelude
+      - strings
+      - unsafe-coerce
+  node-path:
+    type: registry
+    version: 5.0.0
+    integrity: sha256-pd82nQ+2l5UThzaxPdKttgDt7xlsgIDLpPG0yxDEdyE=
+    dependencies:
+      - effect
   node-process:
     type: registry
     version: 11.2.0
@@ -905,6 +949,13 @@ packages:
       - prelude
       - tuples
       - unfoldable
+  now:
+    type: registry
+    version: 6.0.0
+    integrity: sha256-xZ7x37ZMREfs6GCDw/h+FaKHV/3sPWmtqBZRGTxybQY=
+    dependencies:
+      - datetime
+      - effect
   nullable:
     type: registry
     version: 6.0.0

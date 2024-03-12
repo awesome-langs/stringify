@@ -1,1 +1,1 @@
-ghc src/example.hs -outputdir out -o example && ./example
+ghc src/example.hs -outputdir out -o example -fprint-potential-instances && ./example

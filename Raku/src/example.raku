@@ -1,103 +1,114 @@
-sub my-string-to-int (Str:D $s) returns Int:D {
-    return $s.Int;
+class PolyEvalType {
+    has $.type-str;
+    has $.type-name;
+    has $.value-type;
+    has $.key-type;
+
+    method new($type-str, $type-name, $value-type, $key-type) {  
+        return self.bless(:$type-str, :$type-name, :$value-type, :$key-type);
+    }  
 }
 
-sub my-string-to-double (Str:D $s) returns Num:D {
-    return $s.Num;
-}
-
-sub my-int-to-string (Int:D $i) returns Str:D {
-    return $i.Str;
-}
-
-sub my-double-to-string (Num:D $d) returns Str:D {
-    return sprintf("%.6f", $d);
-}
-
-sub my-bool-to-string (Bool:D $b) returns Str:D {
-    return $b ?? "true" !! "false";
-}
-
-sub my-int-to-nullable (Int:D $i) returns Int:_ {
-    if $i > 0 {
-        return $i;
-    } elsif $i < 0 {
-        return -$i;
-    } else {
-        return Int:U;
+sub s-to-type__($type-str) {
+    if $type-str.index("<") -> $idx {
+        my $type-name = $type-str.substr(0, $idx);
+        my $other-str = $type-str.substr($idx + 1, * - 1);
+        if $other-str.index(",") -> $idx {
+            my $key-type = s-to-type__($other-str.substr(0, $idx));
+            my $value-type = s-to-type__($other-str.substr($idx + 1, *));
+            PolyEvalType.new($type-str, $type-name, $value-type, $key-type);
+        }
+        else {
+            my $value-type = s-to-type__($other-str);
+            PolyEvalType.new($type-str, $type-name, $value-type, Nil);
+        }
+    }
+    else {
+        PolyEvalType.new($type-str, $type-str, Nil, Nil);
     }
 }
 
-sub my-nullable-to-int (Int:_ $i) returns Int:D {
-    return $i.defined ?? $i !! -1;
-}
-
-sub my-list-sorted (Array:D[Str:D]() $lst) returns Array:D[Str:D]() {
-    return $lst.sort;
-}
-
-sub my-list-sorted-by-length (Array:D[Str:D]() $lst) returns Array:D[Str:D]() {
-    return $lst.sort({$^a.chars <=> $^b.chars});
-}
-
-sub my-list-filter (Array:D[Int:D]() $lst) returns Array:D[Int:D]() {
-    return $lst.grep({$_ %% 3});
-}
-
-sub my-list-map (Array:D[Int:D]() $lst) returns Array:D[Int:D]() {
-    return $lst.map({$_ * $_});
-}
-
-sub my-list-reduce (Array:D[Int:D]() $lst) returns Int:D {
-    return (0, |$lst).reduce({$^a * 10 + $^b});
-}
-
-sub my-list-operations (Array:D[Int:D]() $lst) returns Int:D {
-    return (0, |($lst.grep(-> $x { $x %% 3 })
-        .map(-> $x { $x * $x })))
-        .reduce(-> $acc, $x {$acc * 10 + $x});
-}
-
-sub my-list-to-dict (Array:D[Int:D]() $lst) returns Hash:D[Int:D, Int:D]() {
-    return Hash[Int, Int]($lst.map({$_ => $_ * $_}));
-}
-
-sub my-dict-to-list (Hash:D[Int:D, Int:D]() $dict) returns Array:D[Int:D]() {
-    return $dict.sort.map({ $_.key.Int + $_.value.Int });
-}
-
-sub my-print-string (Str:D $s) {
-    say $s;
-}
-
-sub my-print-string-list (Array:D[Str:D]() $lst) {
-    for $lst -> $x {
-        print $x ~ " ";
+sub escape-string__($s) {
+    my @new-s = $s.comb.map: -> $c {
+        given $c {
+            when "\\" { "\\\\" }
+            when "\"" { "\\\"" }
+            when "\n" { "\\n" }
+            when "\t" { "\\t" }
+            when "\r" { "\\r" }
+            default { $c }
+        }
     }
-    say "";
+    @new-s.join;
 }
 
-sub my-print-int-list (Array:D[Int:D]() $lst) {
-    my-print-string-list($lst.map({my-int-to-string($_)}));
+sub by-bool__($value) {
+    $value ?? "true" !! "false";
 }
 
-sub my-print-dict (Hash:D[Int:D, Int:D]() $dict) {
-    for $dict.kv -> $k, $v {
-        print my-int-to-string($k) ~ "->" ~ my-int-to-string($v) ~ " ";
+sub by-int__($value) {
+    $value.Str;
+}
+
+sub by-double__($value) {
+    my $vs = sprintf("%.6f", $value);
+    $vs .=subst(/0+$/, "");
+    $vs .=subst(/\.$/, ".0");
+    $vs eq "-0.0" ?? "0.0" !! $vs;
+}
+
+sub by-string__($value) {
+    '"' ~ escape-string__($value) ~ '"';
+}
+
+sub by-list__($value, $ty) {
+    my @v-strs = $value.map: -> $v { val-to-s__($v, $ty.value-type) };
+    '[' ~ @v-strs.join(", ") ~ ']';
+}
+
+sub by-ulist__($value, $ty) {
+    my @v-strs = $value.map: -> $v { val-to-s__($v, $ty.value-type) };
+    '[' ~ @v-strs.sort.join(", ") ~ ']';
+}
+
+sub by-dict__($value, $ty) {
+    my @v-strs = $value.pairs.map: -> $pair { val-to-s__($pair.key, $ty.key-type) ~ "=>" ~ val-to-s__($pair.value, $ty.value-type) };
+    '{' ~ @v-strs.sort.join(", ") ~ '}';
+}
+
+sub by-option__($value, $ty) {
+    $value.defined ?? val-to-s__($value, $ty.value-type) !! "null";
+}
+
+sub val-to-s__($value, $ty) {
+    given $ty.type-name {
+        when "bool" { by-bool__($value) }
+        when "int" { by-int__($value) }
+        when "double" { by-double__($value) }
+        when "str" { by-string__($value) }
+        when "list" { by-list__($value, $ty) }
+        when "ulist" { by-ulist__($value, $ty) }
+        when "dict" { by-dict__($value, $ty) }
+        when "option" { by-option__($value, $ty) }
+        default { die "Unknown type" ~ $ty.type-name }
     }
-    say "";
 }
 
-my-print-string("Hello, World!");
-my-print-string(my-int-to-string(my-string-to-int("123")));
-my-print-string(my-double-to-string(my-string-to-double("123.456")));
-my-print-string(my-bool-to-string(False));
-my-print-string(my-int-to-string(my-nullable-to-int(my-int-to-nullable(18))));
-my-print-string(my-int-to-string(my-nullable-to-int(my-int-to-nullable(-15))));
-my-print-string(my-int-to-string(my-nullable-to-int(my-int-to-nullable(0))));
-my-print-string-list(my-list-sorted(["e", "dddd", "ccccc", "bb", "aaa"]));
-my-print-string-list(my-list-sorted-by-length(["e", "dddd", "ccccc", "bb", "aaa"]));
-my-print-string(my-int-to-string(my-list-reduce(my-list-map(my-list-filter([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))));
-my-print-string(my-int-to-string(my-list-operations([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])));
-my-print-dict(my-list-to-dict([3, 1, 4, 2, 5, 9, 8, 6, 7, 0]));
-my-print-int-list(my-dict-to-list(:{3 => 9, 1 => 1, 4 => 16, 2 => 4, 5 => 25, 9 => 81, 8 => 64, 6 => 36, 7 => 49, 0 => 0}));
+sub stringify__($value, $type-str) {
+    val-to-s__($value, s-to-type__($type-str)) ~ ":" ~ $type-str;
+}
+
+my $tfs = stringify__(True, "bool") ~ "\n" ~
+    stringify__(3, "int") ~ "\n" ~
+    stringify__(3.141592653, "double") ~ "\n" ~
+    stringify__(3.0, "double") ~ "\n" ~
+    stringify__("Hello, World!", "str") ~ "\n" ~
+    stringify__("!@#\$%^&*()\\\"\n\t", "str") ~ "\n" ~
+    stringify__([1, 2, 3], "list<int>") ~ "\n" ~
+    stringify__([True, False, True], "list<bool>") ~ "\n" ~
+    stringify__([3, 2, 1], "ulist<int>") ~ "\n" ~
+    stringify__(%{1 => "one", 2 => "two"}, "dict<int,str>") ~ "\n" ~
+    stringify__(%{"one" => [1, 2, 3], "two" => [4, 5, 6]}, "dict<str,list<int>>") ~ "\n" ~
+    stringify__(Nil, "option<int>") ~ "\n" ~
+    stringify__(3, "option<int>") ~ "\n";
+"stringify.out".IO.spurt($tfs);

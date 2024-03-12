@@ -1,116 +1,173 @@
 use std::collections::HashMap;
 
-fn my_string_to_int(s: &String) -> i32 {
-    s.parse::<i32>().unwrap()
+struct PolyEvalType {
+    type_str: String,
+    type_name: String,
+    value_type: Option<Box<PolyEvalType>>,
+    key_type: Option<Box<PolyEvalType>>,
 }
 
-fn my_string_to_double(s: &String) -> f64 {
-    s.parse::<f64>().unwrap()
+fn new_poly_eval_type__(type_str: String, type_name: String, value_type: Option<Box<PolyEvalType>>, key_type: Option<Box<PolyEvalType>>) -> PolyEvalType {
+    PolyEvalType {
+        type_str,
+        type_name,
+        value_type,
+        key_type,
+    }
 }
 
-fn my_int_to_string(i: i32) -> String {
-    i.to_string()
-}
-
-fn my_double_to_string(d: f64) -> String {
-    format!("{:.6}", d)
-}
-
-fn my_bool_to_string(b: bool) -> String {
-    if b { "true" } else { "false" }.to_string()
-}
-
-fn my_int_to_nullable(i: i32) -> Option<i32> {
-    if i > 0 {
-        Some(i)
-    } else if i < 0 {
-        Some(-i)
+fn __s_to_type(type_str: &str) -> PolyEvalType {
+    if !type_str.contains("<") {
+        return new_poly_eval_type__(type_str.to_string(), type_str.to_string(), None, None);
     } else {
-        None
+        let idx = type_str.find("<").unwrap();
+        let type_name = type_str[..idx].to_string();
+        let other_str = &type_str[idx + 1..type_str.len() - 1];
+        if other_str.contains(",") {
+            let idx = other_str.find(",").unwrap();
+            let key_type = Some(Box::new(__s_to_type(&other_str[..idx])));
+            let value_type = Some(Box::new(__s_to_type(&other_str[idx + 1..])));
+            new_poly_eval_type__(type_str.to_string(), type_name, value_type, key_type)
+        } else {
+            let value_type = Some(Box::new(__s_to_type(other_str)));
+            new_poly_eval_type__(type_str.to_string(), type_name, value_type, None)
+        }
     }
 }
 
-fn my_nullable_to_int(i: &Option<i32>) -> i32 {
-    match i {
-        Some(x) => x,
-        None => -1,
+fn escape_string__(s: &str) -> String {
+    let mut new_s = String::new();
+    for c in s.chars() {
+        match c {
+            '\\' => new_s.push_str("\\\\"),
+            '\"' => new_s.push_str("\\\""),
+            '\n' => new_s.push_str("\\n"),
+            '\t' => new_s.push_str("\\t"),
+            '\r' => new_s.push_str("\\r"),
+            _ => new_s.push(c),
+        }
+    }
+    new_s
+}
+
+trait MyValToS {
+    fn val_to_s__(&self, t: &PolyEvalType) -> String;
+}
+
+impl MyValToS for bool {
+    fn val_to_s__(&self, t: &PolyEvalType) -> String {
+        if t.type_name == "bool" {
+            if *self {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            }
+        } else {
+            panic!("Type mismatch");
+        }
     }
 }
 
-fn my_list_sorted(lst: &Vec<String>) -> Vec<String> {
-    let mut tmp = lst.clone();
-    tmp.sort();
-    tmp
-}
-
-fn my_list_sorted_by_length(lst: &Vec<String>) -> Vec<String> {
-    let mut tmp = lst.clone();
-    tmp.sort_by(|a, b| a.len().cmp(&b.len()));
-    tmp
-}
-
-fn my_list_filter(lst: &Vec<i32>) -> Vec<i32> {
-    lst.iter().filter(|&x| x % 3 == 0).cloned().collect()
-}
-
-fn my_list_map(lst: &Vec<i32>) -> Vec<i32> {
-    lst.iter().map(|x| x * x).collect()
-}
-
-fn my_list_reduce(lst: &Vec<i32>) -> i32 {
-    lst.iter().fold(0, |acc, &x| acc * 10 + x)
-}
-
-fn my_list_operations(lst: &Vec<i32>) -> i32 {
-    lst.iter().filter(|&x| x % 3 == 0)
-        .map(|x| x * x)
-        .fold(0, |acc, x| acc * 10 + x)
-}
-
-fn my_list_to_dict(lst: &Vec<i32>) -> HashMap<i32, i32> {
-    lst.iter().map(|&x| (x, x * x)).collect()
-}
-
-fn my_dict_to_list(dict: &HashMap<i32, i32>) -> Vec<i32> {
-    let mut tmp: Vec<(i32, i32)> = dict.iter().map(|(&k, &v)| (k, v)).collect();
-    tmp.sort_by(|a, b| a.0.cmp(&b.0));
-    tmp.iter().map(|(k, v)| k + v).collect()
-}
-
-fn my_print_string(s: &String) {
-    println!("{}", s);
-}
-
-fn my_print_string_list(lst: &Vec<String>) {
-    for x in lst {
-        print!("{}", x.to_string() + " ");
+impl MyValToS for i32 {
+    fn val_to_s__(&self, t: &PolyEvalType) -> String {
+        if t.type_name == "int" {
+            self.to_string()
+        } else {
+            panic!("Type mismatch");
+        }
     }
-    println!();
 }
 
-fn my_print_int_list(lst: &Vec<i32>) {
-    my_print_string_list(&lst.iter().map(|x| my_int_to_string(*x)).collect());
-}
-
-fn my_print_dict(dict: &HashMap<i32, i32>) {
-    for (k, v) in dict {
-        print!("{}", my_int_to_string(*k) + "->" + &my_int_to_string(*v) + " ");
+impl MyValToS for f64 {
+    fn val_to_s__(&self, t: &PolyEvalType) -> String {
+        if t.type_name == "double" {
+            let vs = format!("{:.6}", self);
+            if vs.ends_with("0") {
+                let vs = vs.trim_end_matches('0');
+                if vs.ends_with('.') {
+                    vs.to_string() + "0"
+                } else {
+                    vs.to_string()
+                }
+            } else if vs == "-0.0" {
+                "0.0".to_string()
+            } else {
+                vs
+            }
+        } else {
+            panic!("Type mismatch");
+        }
     }
-    println!();
+}
+
+impl MyValToS for String {
+    fn val_to_s__(&self, t: &PolyEvalType) -> String {
+        if t.type_name == "str" {
+            format!("\"{}\"", escape_string__(self))
+        } else {
+            panic!("Type mismatch");
+        }
+    }
+}
+
+impl<T: MyValToS> MyValToS for Vec<T> {
+    fn val_to_s__(&self, t: &PolyEvalType) -> String {
+        if t.type_name == "list" {
+            let v_strs: Vec<String> = self.iter().map(|v| v.val_to_s__(t.value_type.as_ref().unwrap())).collect();
+            format!("[{}]", v_strs.join(", "))
+        } else if t.type_name == "ulist" {
+            let mut v_strs: Vec<String> = self.iter().map(|v| v.val_to_s__(t.value_type.as_ref().unwrap())).collect();
+            v_strs.sort();
+            format!("[{}]", v_strs.join(", "))
+        } else {
+            panic!("Type mismatch");
+        }
+    }
+}
+
+impl<K: MyValToS, V: MyValToS> MyValToS for std::collections::HashMap<K, V> {
+    fn val_to_s__(&self, t: &PolyEvalType) -> String {
+        if t.type_name == "dict" {
+            let mut v_strs: Vec<String> = self.iter().map(|(key, val)| format!("{}=>{}", key.val_to_s__(t.key_type.as_ref().unwrap()), val.val_to_s__(t.value_type.as_ref().unwrap()))).collect();
+            v_strs.sort();
+            format!("{{{}}}", v_strs.join(", "))
+        } else {
+            panic!("Type mismatch");
+        }
+    }
+}
+
+impl<T: MyValToS> MyValToS for Option<T> {
+    fn val_to_s__(&self, t: &PolyEvalType) -> String {
+        if t.type_name == "option" {
+            if let Some(v) = self {
+                v.val_to_s__(t.value_type.as_ref().unwrap())
+            } else {
+                "null".to_string()
+            }
+        } else {
+            panic!("Type mismatch");
+        }
+    }
+}
+
+fn stringify__<T: MyValToS>(value: T, type_str: &str) -> String {
+    value.val_to_s__(&__s_to_type(type_str)) + ":" + type_str
 }
 
 fn main() {
-    my_print_string(&"Hello, World!".to_string());
-    my_print_string(&my_int_to_string(my_string_to_int(&"123".to_string())));
-    my_print_string(&my_double_to_string(my_string_to_double(&"123.456".to_string())));
-    my_print_string(&my_bool_to_string(false));
-    my_print_string(&my_int_to_string(my_nullable_to_int(my_int_to_nullable(18))));
-    my_print_string(&my_int_to_string(my_nullable_to_int(my_int_to_nullable(-15))));
-    my_print_string(&my_int_to_string(my_nullable_to_int(my_int_to_nullable(0))));
-    my_print_string_list(&my_list_sorted(&vec!["e".to_string(), "dddd".to_string(), "ccccc".to_string(), "bb".to_string(), "aaa".to_string()]));
-    my_print_string_list(&my_list_sorted_by_length(&vec!["e".to_string(), "dddd".to_string(), "ccccc".to_string(), "bb".to_string(), "aaa".to_string()]));
-    my_print_string(&my_int_to_string(my_list_reduce(&my_list_map(&my_list_filter(&vec![3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))));
-    my_print_string(&my_int_to_string(my_list_operations(&vec![3, 12, 5, 8, 9, 15, 7, 17, 21, 11])));
-    my_print_dict(&my_list_to_dict(&vec![3, 1, 4, 2, 5, 9, 8, 6, 7, 0]));
-    my_print_int_list(&my_dict_to_list(&[(3, 9), (1, 1), (4, 16), (2, 4), (5, 25), (9, 81), (8, 64), (6, 36), (7, 49), (0, 0)].iter().cloned().collect()));
+    let tfs = stringify__(true, "bool") + "\n" 
+        + &stringify__(3, "int") + "\n" 
+        + &stringify__(3.141592653, "double") + "\n" 
+        + &stringify__(3.0, "double") + "\n" 
+        + &stringify__("Hello, World!".to_string(), "str") + "\n" 
+        + &stringify__("!@#$%^&*()\\\"\n\t".to_string(), "str") + "\n" 
+        + &stringify__(vec![1, 2, 3], "list<int>") + "\n" 
+        + &stringify__(vec![true, false, true], "list<bool>") + "\n" 
+        + &stringify__(vec![3, 2, 1], "ulist<int>") + "\n" 
+        + &stringify__(std::collections::HashMap::from([(1, "one".to_string()), (2, "two".to_string())]), "dict<int,str>") + "\n" 
+        + &stringify__(std::collections::HashMap::from([("one".to_string(), vec![1, 2, 3]), ("two".to_string(), vec![4, 5, 6])]), "dict<str,list<int>>") + "\n" 
+        + &stringify__(None::<i32>, "option<int>") + "\n" 
+        + &stringify__(Some(3), "option<int>") + "\n";
+    std::fs::write("stringify.out", tfs).unwrap();
 }

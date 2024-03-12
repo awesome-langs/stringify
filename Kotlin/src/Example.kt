@@ -1,105 +1,130 @@
-fun myStringToInt(s: String): Int {
-    return s.toInt()
+class PolyEvalType {
+    val typeStr: String
+    val typeName: String
+    val valueType: PolyEvalType?
+    val keyType: PolyEvalType?
+
+    constructor(typeStr: String, typeName: String, valueType: PolyEvalType?, keyType: PolyEvalType?) {
+        this.typeStr = typeStr
+        this.typeName = typeName
+        this.valueType = valueType
+        this.keyType = keyType
+    }
 }
 
-fun myStringToDouble(s: String): Double {
-    return s.toDouble()
-}
-
-fun myIntToString(i: Int): String {
-    return i.toString()
-}
-
-fun myDoubleToString(d: Double): String {
-    return String.format("%.6f", d)
-}
-
-fun myBoolToString(b: Boolean): String {
-    return if (b) "true" else "false"
-}
-
-fun myIntToNullable(i: Int): Int? {
-    if (i > 0) {
-        return i
-    } else if (i < 0) {
-        return -i
+fun sToType__(typeStr: String): PolyEvalType {
+    if (!typeStr.contains("<")) {
+        return PolyEvalType(typeStr, typeStr, null, null)
     } else {
-        return null
+        val idx = typeStr.indexOf("<")
+        val typeName = typeStr.substring(0, idx)
+        val otherStr = typeStr.substring(idx + 1, typeStr.length - 1)
+        if (!otherStr.contains(",")) {
+            val valueType = sToType__(otherStr)
+            return PolyEvalType(typeStr, typeName, valueType, null)
+        } else {
+            val idx = otherStr.indexOf(",")
+            val keyType = sToType__(otherStr.substring(0, idx))
+            val valueType = sToType__(otherStr.substring(idx + 1))
+            return PolyEvalType(typeStr, typeName, valueType, keyType)
+        }
     }
 }
 
-fun myNullableToInt(i: Int?): Int {
-    return i ?: -1
-}
-
-fun myListSorted(lst: List<String>): List<String> {
-    return lst.sorted()
-}
-
-fun myListSortedByLength(lst: List<String>): List<String> {
-    return lst.sortedBy { it.length }
-}
-
-fun myListFilter(lst: List<Int>): List<Int> {
-    return lst.filter { it % 3 == 0 }
-}
-
-fun myListMap(lst: List<Int>): List<Int> {
-    return lst.map { it * it }
-}
-
-fun myListReduce(lst: List<Int>): Int {
-    return lst.fold(0) { acc, x -> acc * 10 + x }
-}
-
-fun myListOperations(lst: List<Int>): Int {
-    return lst.filter { x -> x % 3 == 0 }
-        .map { x -> x * x }
-        .fold(0) { acc, x -> acc * 10 + x }
-}
-
-fun myListToDict(lst: List<Int>): Map<Int, Int> {
-    return lst.associateWith { it * it }
-}
-
-fun myDictToList(lst: Map<Int, Int>): List<Int> {
-    return lst.toList().sortedBy { it.first }.map { it.first + it.second }
-}
-
-fun myPrintString(s: String) {
-    println(s)
-}
-
-fun myPrintStringList(lst: List<String>) {
-    for (x in lst) {
-        print(x + " ")
+fun escapeString__(s: String): String {
+    val newS = StringBuilder()
+    for (c in s) {
+        when (c) {
+            '\\' -> newS.append("\\\\")
+            '\"' -> newS.append("\\\"")
+            '\n' -> newS.append("\\n")
+            '\t' -> newS.append("\\t")
+            '\r' -> newS.append("\\r")
+            else -> newS.append(c)
+        }
     }
-    println()
+    return newS.toString()
 }
 
-fun myPrintIntList(lst: List<Int>) {
-    myPrintStringList(lst.map { myIntToString(it) })
+fun byBool__(value: Boolean): String {
+    return if (value) "true" else "false"
 }
 
-fun myPrintDict(dict: Map<Int, Int>) {
-    for ((k, v) in dict) {
-        print(myIntToString(k) + "->" + myIntToString(v) + " ")
+fun byInt__(value: Int): String {
+    return value.toString()
+}
+
+fun byDouble__(value: Double): String {
+    val vs = String.format("%.6f", value)
+    var newVs = vs
+    while (newVs.endsWith("0")) {
+        newVs = newVs.substring(0, newVs.length - 1)
     }
-    println()
+    if (newVs.endsWith(".")) {
+        newVs += "0"
+    }
+    if (newVs == "-0.0") {
+        newVs = "0.0"
+    }
+    return newVs
+}
+
+fun byString__(value: String): String {
+    return "\"" + escapeString__(value) + "\""
+}
+
+fun byList__(value: List<*>, ty: PolyEvalType): String {
+    val vStrs = value.map { valToS__(it, ty.valueType!!) }
+    return "[" + vStrs.joinToString(", ") + "]"
+}
+
+fun byUlist__(value: List<*>, ty: PolyEvalType): String {
+    val vStrs = value.map { valToS__(it, ty.valueType!!) }
+    return "[" + vStrs.sorted().joinToString(", ") + "]"
+}
+
+fun byDict__(value: Map<*, *>, ty: PolyEvalType): String {
+    val vStrs = value.map { valToS__(it.key, ty.keyType!!) + "=>" + valToS__(it.value, ty.valueType!!) }
+    return "{" + vStrs.sorted().joinToString(", ") + "}"
+}
+
+fun byOption__(value: Any?, ty: PolyEvalType): String {
+    return if (value == null) "null" else valToS__(value, ty.valueType!!)
+}
+
+fun valToS__(value: Any?, ty: PolyEvalType): String {
+    val typeName = ty.typeName
+    return when (typeName) {
+        "bool" -> if (value is Boolean) byBool__(value) else throw IllegalArgumentException("Type mismatch")
+        "int" -> if (value is Int) byInt__(value) else throw IllegalArgumentException("Type mismatch")
+        "double" -> if (value is Double) byDouble__(value) else throw IllegalArgumentException("Type mismatch")
+        "str" -> if (value is String) byString__(value) else throw IllegalArgumentException("Type mismatch")
+        "list" -> if (value is List<*>) byList__(value, ty) else throw IllegalArgumentException("Type mismatch")
+        "ulist" -> if (value is List<*>) byUlist__(value, ty) else throw IllegalArgumentException("Type mismatch")
+        "dict" -> if (value is Map<*, *>) byDict__(value, ty) else throw IllegalArgumentException("Type mismatch")
+        "option" -> byOption__(value, ty)
+        else -> throw IllegalArgumentException("Unknown type $typeName")
+    }
+}
+
+fun stringify__(value: Any?, typeStr: String): String {
+    return valToS__(value, sToType__(typeStr)) + ":" + typeStr
 }
 
 fun main() {
-    myPrintString("Hello, World!")
-    myPrintString(myIntToString(myStringToInt("123")))
-    myPrintString(myDoubleToString(myStringToDouble("123.456")))
-    myPrintString(myBoolToString(false))
-    myPrintString(myIntToString(myNullableToInt(myIntToNullable(18))))
-    myPrintString(myIntToString(myNullableToInt(myIntToNullable(-15))))
-    myPrintString(myIntToString(myNullableToInt(myIntToNullable(0))))
-    myPrintStringList(myListSorted(listOf("e", "dddd", "ccccc", "bb", "aaa")))
-    myPrintStringList(myListSortedByLength(listOf("e", "dddd", "ccccc", "bb", "aaa")))
-    myPrintString(myIntToString(myListReduce(myListMap(myListFilter(listOf(3, 12, 5, 8, 9, 15, 7, 17, 21, 11))))))
-    myPrintString(myIntToString(myListOperations(listOf(3, 12, 5, 8, 9, 15, 7, 17, 21, 11))))
-    myPrintDict(myListToDict(listOf(3, 1, 4, 2, 5, 9, 8, 6, 7, 0)))
-    myPrintIntList(myDictToList(mapOf(3 to 9, 1 to 1, 4 to 16, 2 to 4, 5 to 25, 9 to 81, 8 to 64, 6 to 36, 7 to 49, 0 to 0)))
+    val tfs = stringify__(true, "bool") + "\n" +
+            stringify__(3, "int") + "\n" +
+            stringify__(3.141592653, "double") + "\n" +
+            stringify__(3.0, "double") + "\n" +
+            stringify__("Hello, World!", "str") + "\n" +
+            stringify__("!@#\$%^&*()\\\"\n\t", "str") + "\n" +
+            stringify__(listOf(1, 2, 3), "list<int>") + "\n" +
+            stringify__(listOf(true, false, true), "list<bool>") + "\n" +
+            stringify__(listOf(3, 2, 1), "ulist<int>") + "\n" +
+            stringify__(mapOf(1 to "one", 2 to "two"), "dict<int,str>") + "\n" +
+            stringify__(mapOf("one" to listOf(1, 2, 3), "two" to listOf(4, 5, 6)), "dict<str,list<int>>") + "\n" +
+            stringify__(null, "option<int>") + "\n" +
+            stringify__(3, "option<int>") + "\n"
+    val f = java.io.File("stringify.out")
+    f.writeText(tfs)
 }

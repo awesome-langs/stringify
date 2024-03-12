@@ -1,113 +1,171 @@
-use HH\Lib\C;
 use HH\Lib\Vec;
 use HH\Lib\Str;
 use HH\Lib\Dict;
 
-function my_string_to_int(string $s): int {
-    return (int) $s;
+class PolyEvalType {
+    public string $type_str;
+    public string $type_name;
+    public ?PolyEvalType $value_type;
+    public ?PolyEvalType $key_type;
+
+    public function __construct(string $type_str, string $type_name, ?PolyEvalType $value_type, ?PolyEvalType $key_type) {
+        $this->type_str = $type_str;
+        $this->type_name = $type_name;
+        $this->value_type = $value_type;
+        $this->key_type = $key_type;
+    }
 }
 
-function my_string_to_double(string $s): float {
-    return (float) $s;
-}
-
-function my_int_to_string(int $i): string {
-    return (string) $i;
-}
-
-function my_double_to_string(float $d): string {
-    return sprintf("%.6f", $d);
-}
-
-function my_bool_to_string(bool $b): string {
-    return $b ? "true" : "false";
-}
-
-function my_int_to_nullable(int $i): ?int {
-    if ($i > 0) {
-        return $i;
-    } else if ($i < 0) {
-        return -$i;
+function s_to_type__(string $type_str): PolyEvalType {
+    if (strpos($type_str, "<") === false) {
+        return new PolyEvalType($type_str, $type_str, null, null);
     } else {
-        return null;
+        $idx = strpos($type_str, "<");
+        $type_name = substr($type_str, 0, $idx);
+        $other_str = substr($type_str, $idx + 1, -1);
+        if (strpos($other_str, ",") === false) {
+            $value_type = s_to_type__($other_str);
+            return new PolyEvalType($type_str, $type_name, $value_type, null);
+        } else {
+            $idx = strpos($other_str, ",");
+            $key_type = s_to_type__(substr($other_str, 0, $idx));
+            $value_type = s_to_type__(substr($other_str, $idx + 1));
+            return new PolyEvalType($type_str, $type_name, $value_type, $key_type);
+        }
     }
 }
 
-function my_nullable_to_int(?int $i): int {
-    return $i ?? -1;
-}
-
-function my_list_sorted(vec<string> $lst): vec<string> {
-    return Vec\sort($lst);
-}
-
-function my_list_sorted_by_length(vec<string> $lst): vec<string> {
-    return Vec\sort_by($lst, $x ==> Str\length($x));
-}
-
-function my_list_filter(vec<int> $lst): vec<int> {
-    return Vec\filter($lst, $x ==> $x % 3 === 0);
-}
-
-function my_list_map(vec<int> $lst): vec<int> {
-    return Vec\map($lst, $x ==> $x * $x);
-}
-
-function my_list_reduce(vec<int> $lst): int {
-    return C\reduce($lst, ($acc, $x) ==> $acc * 10 + $x, 0);
-}
-
-function my_list_operations(vec<int> $lst): int {
-    return $lst |> Vec\filter($$, $x ==> $x % 3 === 0)
-        |> Vec\map($$, $x ==> $x * $x)
-        |> C\reduce($$, ($acc, $x) ==> $acc * 10 + $x, 0);
-}
-
-function my_list_to_dict(vec<int> $lst): dict<int, int> {
-    return Dict\from_keys($lst, $x ==> $x * $x);
-}
-
-function my_dict_to_list(dict<int, int> $dict): vec<int> {
-    return $dict |> Dict\map_with_key($$, ($k, $v) ==> $k + $v)
-        |> Dict\sort_by_key($$)
-        |> vec($$);
-}
-
-function my_print_string(string $s): void {
-    echo $s . "\n";
-}
-
-function my_print_string_list(vec<string> $lst): void {
-    foreach ($lst as $x) {
-        echo $x . " ";
+function escape_string__(string $s): string {
+    $new_s = vec[];
+    for ($i = 0; $i < strlen($s); $i++) {
+        $c = $s[$i];
+        if ($c === "\\") {
+            $new_s[] = "\\\\";
+        } else if ($c === "\"") {
+            $new_s[] = "\\\"";
+        } else if ($c === "\n") {
+            $new_s[] = "\\n";
+        } else if ($c === "\t") {
+            $new_s[] = "\\t";
+        } else if ($c === "\r") {
+            $new_s[] = "\\r";
+        } else {
+            $new_s[] = $c;
+        }
     }
-    echo "\n";
+    return implode("", $new_s);
 }
 
-function my_print_int_list(vec<int> $lst): void {
-    my_print_string_list(Vec\map($lst, $x ==> my_int_to_string($x)));
+function by_bool__(bool $value): string {
+    return $value ? "true" : "false";
 }
 
-function my_print_dict(dict<int, int> $dict): void {
-    foreach ($dict as $k => $v) {
-        echo my_int_to_string($k) . "->" . my_int_to_string($v) . " ";
+function by_int__(int $value): string {
+    return (string)$value;
+}
+
+function by_double__(float $value): string {
+    $vs = sprintf("%.6f", $value);
+    while (substr($vs, -1) === "0") {
+        $vs = substr($vs, 0, -1);
     }
-    echo "\n";
+    if (substr($vs, -1) === ".") {
+        $vs .= "0";
+    }
+    if ($vs === "-0.0") {
+        $vs = "0.0";
+    }
+    return $vs;
+}
+
+function by_string__(string $value): string {
+    return '"' . escape_string__($value) . '"';
+}
+
+function by_list__(vec<mixed> $value, PolyEvalType $ty): string {
+    $v_strs = Vec\map($value, $v ==> val_to_s__($v, $ty->value_type));
+    return "[" . implode(", ", $v_strs) . "]";
+}
+
+function by_ulist__(vec<mixed> $value, PolyEvalType $ty): string {
+    $v_strs = Vec\map($value, $v ==> val_to_s__($v, $ty->value_type));
+    return "[" . implode(", ", Vec\sort($v_strs)) . "]";
+}
+
+function by_dict__(dict<mixed, mixed> $value, PolyEvalType $ty): string {
+    $v_strs = Dict\map_with_key($value, ($key, $val) ==> val_to_s__($key, $ty->key_type) . "=>" . val_to_s__($val, $ty->value_type));
+    return "{" . implode(", ", Vec\sort($v_strs)) . "}";
+}
+
+function by_option__(mixed $value, PolyEvalType $ty): string {
+    if ($value === null) {
+        return "null";
+    } else {
+        return val_to_s__($value, $ty->value_type);
+    }
+}
+
+function val_to_s__(mixed $value, PolyEvalType $ty): string {
+    $type_name = $ty->type_name;
+    if ($type_name === "bool") {
+        if (!is_bool($value)) {
+            throw new \Exception("Type mismatch");
+        }
+        return by_bool__($value);
+    } else if ($type_name === "int") {
+        if (!is_int($value) && !(is_float($value) && (int)$value === $value)) {
+            throw new \Exception("Type mismatch");
+        }
+        return by_int__($value);
+    } else if ($type_name === "double") {
+        if (!is_int($value) && !is_float($value)) {
+            throw new \Exception("Type mismatch");
+        }
+        return by_double__($value);
+    } else if ($type_name === "str") {
+        if (!is_string($value)) {
+            throw new \Exception("Type mismatch");
+        }
+        return by_string__($value);
+    } else if ($type_name === "list") {
+        if (!is_array($value)) {
+            throw new \Exception("Type mismatch");
+        }
+        return by_list__($value, $ty);
+    } else if ($type_name === "ulist") {
+        if (!is_array($value)) {
+            throw new \Exception("Type mismatch");
+        }
+        return by_ulist__($value, $ty);
+    } else if ($type_name === "dict") {
+        if (!is_array($value)) {
+            throw new \Exception("Type mismatch");
+        }
+        return by_dict__($value, $ty);
+    } else if ($type_name === "option") {
+        return by_option__($value, $ty);
+    }
+    throw new \Exception("Unknown type " . $type_name);
+}
+
+function stringify__(mixed $value, string $type_str): string {
+    return val_to_s__($value, s_to_type__($type_str)) . ":" . $type_str;
 }
 
 <<__EntryPoint>>
 function main(): void {
-    my_print_string("Hello, World!");
-    my_print_string(my_int_to_string(my_string_to_int("123")));
-    my_print_string(my_double_to_string(my_string_to_double("123.456")));
-    my_print_string(my_bool_to_string(false));
-    my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(18))));
-    my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(-15))));
-    my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(0))));
-    my_print_string_list(my_list_sorted(vec["e", "dddd", "ccccc", "bb", "aaa"]));
-    my_print_string_list(my_list_sorted_by_length(vec["e", "dddd", "ccccc", "bb", "aaa"]));
-    my_print_string(my_int_to_string(my_list_reduce(my_list_map(my_list_filter(vec[3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))));
-    my_print_string(my_int_to_string(my_list_operations(vec[3, 12, 5, 8, 9, 15, 7, 17, 21, 11])));
-    my_print_dict(my_list_to_dict(vec[3, 1, 4, 2, 5, 9, 8, 6, 7, 0]));
-    my_print_int_list(my_dict_to_list(dict[3 => 9, 1 => 1, 4 => 16, 2 => 4, 5 => 25, 9 => 81, 8 => 64, 6 => 36, 7 => 49, 0 => 0]));
+    $tfs = stringify__(true, "bool") . "\n" .
+        stringify__(3, "int") . "\n" .
+        stringify__(3.141592653, "double") . "\n" .
+        stringify__(3.0, "double") . "\n" .
+        stringify__("Hello, World!", "str") . "\n" .
+        stringify__("!@#$%^&*()\\\"\n\t", "str") . "\n" .
+        stringify__(vec[1, 2, 3], "list<int>") . "\n" .
+        stringify__(vec[true, false, true], "list<bool>") . "\n" .
+        stringify__(vec[3, 2, 1], "ulist<int>") . "\n" .
+        stringify__(dict[1 => "one", 2 => "two"], "dict<int,str>") . "\n" .
+        stringify__(dict["one" => vec[1, 2, 3], "two" => vec[4, 5, 6]], "dict<str,list<int>>") . "\n" .
+        stringify__(null, "option<int>") . "\n" .
+        stringify__(3, "option<int>") . "\n";
+    file_put_contents("stringify.out", $tfs);
 }

@@ -6,6 +6,7 @@ package:
     - integers
     - lists
     - maybe
+    - node-fs
     - node-process
     - numbers
     - ordered-collections

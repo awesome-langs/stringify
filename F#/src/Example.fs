@@ -1,88 +1,143 @@
-let myStringToInt (s: string): int = 
-    int s
+type PolyEvalType = {
+    typeStr: string
+    typeName: string
+    valueType: PolyEvalType option
+    keyType: PolyEvalType option
+}
 
-let myStringToDouble (s: string): double =
-    double s
+let newPolyEvalType (typeStr: string) (typeName: string) (valueType: PolyEvalType option) (keyType: PolyEvalType option): PolyEvalType =
+    { typeStr = typeStr; typeName = typeName; valueType = valueType; keyType = keyType }
 
-let myIntToString (i: int): string =
-    i.ToString()
+let rec sToType__ (typeStr: string): PolyEvalType =
+    if not (typeStr.Contains "<") then
+        newPolyEvalType typeStr typeStr None None
+    else
+        let idx = typeStr.IndexOf "<"
+        let typeName = typeStr.Substring(0, idx)
+        let otherStr = typeStr.Substring(idx + 1, typeStr.Length - idx - 2)
+        if not (otherStr.Contains ",") then
+            let valueType = sToType__ otherStr
+            newPolyEvalType typeStr typeName (Some valueType) None
+        else
+            let idx = otherStr.IndexOf ","
+            let keyType = sToType__ (otherStr.Substring(0, idx))
+            let valueType = sToType__ (otherStr.Substring(idx + 1))
+            newPolyEvalType typeStr typeName (Some valueType) (Some keyType)
 
-let myDoubleToString (d: double): string =
-    sprintf "%.6f" d
+let escapeString__ s =
+    let newS = Seq.map (fun c ->
+        match c with
+        | '\\' -> "\\\\"
+        | '\"' -> "\\\""
+        | '\n' -> "\\n"
+        | '\t' -> "\\t"
+        | '\r' -> "\\r"
+        | _ -> string c ) s
+    String.concat "" newS
+    
+let byBool__ value: string =
+    if value then "true" else "false"
 
-let myBoolToString (b: bool): string =
-    if b then "true" else "false"
+let byInt__ value: string =
+    value.ToString()
 
-let myIntToNullable (i: int): int option =
-    if i > 0 then Some i
-    elif i < 0 then Some -i
-    else None
+let byDouble__ value: string =
+    let mutable vs = sprintf "%.6f" value
+    while vs.EndsWith("0") do 
+        vs <- vs.[..^1]
+    vs <- if vs.EndsWith(".") then vs + "0" else vs
+    if vs = "-0.0" then "0.0" else vs
 
-let myNullableToInt (i: int option): int =
-    match i with
-    | Some x -> x
-    | None -> -1
+let byString__ value: string =
+    "\"" + escapeString__ value + "\""
 
-let myListSorted (lst: string list): string list =
-    List.sort lst
+let rec byList__ value (ty: PolyEvalType): string =
+    let vStrs = List.map (fun v -> valToS__ v ty.valueType.Value) value
+    "[" + (String.concat ", " vStrs) + "]"
 
-let myListSortedByLength (lst: string list): string list =
-    List.sortBy (fun x -> x.Length) lst
+and byUlist__ value (ty: PolyEvalType): string =
+    let vStrs = List.map (fun v -> valToS__ v ty.valueType.Value) value
+    "[" + (String.concat ", " (List.sort vStrs)) + "]"
 
-let myListFilter (lst: int list): int list =
-    List.filter (fun x -> x % 3 = 0) lst
+and byDict__ value (ty: PolyEvalType): string =
+    let vStrs = List.map (fun (k, v) -> (valToS__ k ty.keyType.Value) + "=>" + (valToS__ v ty.valueType.Value)) (value |> Seq.map (|KeyValue|) |> List.ofSeq)
+    "{" + (String.concat ", " (List.sort vStrs)) + "}"
 
-let myListMap (lst: int list): int list =
-    List.map (fun x -> x * x) lst
+and byOption__ (value: obj) (ty: PolyEvalType): string =
+    if value = null then "null"
+    else if value.GetType().IsGenericType && value.GetType().GetGenericTypeDefinition() = typedefof<_ option> then
+        valToS__ (value.GetType().GetProperty("Value").GetValue(value)) ty.valueType.Value
+    else
+        raise (System.Exception("Type mismatch"))
 
-let myListReduce (lst: int list): int =
-    List.fold (fun acc x -> acc * 10 + x) 0 lst
+and valToS__ (value: obj) (ty: PolyEvalType): string =
+    let typeName = ty.typeName
+    match typeName with
+    | "bool" -> 
+        match value with 
+            | :? bool as v -> byBool__ v
+            | _ -> raise (System.Exception("Type mismatch"))
+    | "int" -> 
+        match value with 
+            | :? int as v -> byInt__ v
+            | _ -> raise (System.Exception("Type mismatch"))
+    | "double" ->
+        match value with 
+            | :? double as v -> byDouble__ v
+            | _ -> raise (System.Exception("Type mismatch"))
+    | "str" ->
+        match value with 
+            | :? string as v -> byString__ v
+            | _ -> raise (System.Exception("Type mismatch"))
+    | "list" ->
+        match value with 
+            | :? System.Collections.IEnumerable as v -> 
+                if value.GetType().IsGenericType && value.GetType().GetGenericTypeDefinition() = typedefof<_ list> then 
+                    let mutable listValue: obj list = []
+                    for v1 in v do
+                        listValue <- listValue @ [v1]
+                    byList__ listValue ty
+                else raise (System.Exception("Type mismatch"))
+            | _ -> raise (System.Exception("Type mismatch")) 
+    | "ulist" ->
+        match value with 
+            | :? System.Collections.IEnumerable as v -> 
+                if value.GetType().IsGenericType && value.GetType().GetGenericTypeDefinition() = typedefof<_ list> then
+                    let mutable listValue: obj list = []
+                    for v1 in v do
+                        listValue <- listValue @ [v1]
+                    byList__ listValue ty
+                else raise (System.Exception("Type mismatch"))
+            | _ -> raise (System.Exception("Type mismatch"))
+    | "dict" ->
+        match value with 
+            | :? System.Collections.IEnumerable as v -> 
+                if value.GetType().IsGenericType && value.GetType().GetGenericTypeDefinition() = typedefof<Map<_, _>> then
+                    let dictValue: System.Collections.Generic.Dictionary<obj, obj> = new System.Collections.Generic.Dictionary<obj, obj>()
+                    for kv in v do
+                        dictValue.Add(kv.GetType().GetProperty("Key").GetValue(kv), kv.GetType().GetProperty("Value").GetValue(kv))
+                    byDict__ dictValue ty
+                else raise (System.Exception("Type mismatch"))
+            | _ -> raise (System.Exception("Type mismatch"))
+    | "option" -> byOption__ value ty
+    | _ -> raise (System.Exception("Unknown type " + typeName))
 
-let myListOperations (lst: int list): int =
-    lst |> List.filter (fun x -> x % 3 = 0)
-        |> List.map (fun x -> x * x)
-        |> List.fold (fun acc x -> acc * 10 + x) 0
+let stringify__ (value: obj) (typeStr: string): string =
+    valToS__ value (sToType__ typeStr) + ":" + typeStr
 
-let myListToDict (lst: int list): Map<int, int> =
-    lst |> List.map (fun x -> x, x * x) |> Map.ofList
-
-let myDictToList (dict: Map<int, int>): int list =
-    dict |> Map.toList |> List.sortBy (fun (k, v) -> k) |> List.map (fun (k, v) -> k + v)
-
-let myPrintString (s: string): unit =
-    printfn "%s" s
-
-let myPrintStringList (lst: string list): unit =
-    for x in lst do
-        printf "%s " x
-    printfn ""
-
-let myPrintIntList (lst: int list): unit =
-    lst |> List.map (fun x -> myIntToString x) |> myPrintStringList
-
-let myPrintDict (dict: Map<int, int>): unit =
-    for KeyValue(k, v) in dict do
-        printf "%s->%s " (myIntToString k) (myIntToString v)
-    printfn ""
-
-myPrintString "Hello, World!"
-myPrintString (myIntToString (myStringToInt "123"))
-myPrintString (myDoubleToString (myStringToDouble "123.456"))
-myPrintString (myBoolToString false)
-myPrintString (myIntToString (myNullableToInt (myIntToNullable 18)))
-myPrintString (myIntToString (myNullableToInt (myIntToNullable -15)))
-myPrintString (myIntToString (myNullableToInt (myIntToNullable 0)))
-myPrintStringList (myListSorted ["e"; "dddd"; "ccccc"; "bb"; "aaa"])
-myPrintStringList (myListSortedByLength ["e"; "dddd"; "ccccc"; "bb"; "aaa"])
-myPrintString (myIntToString (myListReduce (myListMap (myListFilter [3; 12; 5; 8; 9; 15; 7; 17; 21; 11]))))
-myPrintString (myIntToString (myListOperations [3; 12; 5; 8; 9; 15; 7; 17; 21; 11]))
-myPrintDict (myListToDict [3; 1; 4; 2; 5; 9; 8; 6; 7; 0])
-myPrintIntList (myDictToList (Map [3, 9; 1, 1; 4, 16; 2, 4; 5, 25; 9, 81; 8, 64; 6, 36; 7, 49; 0, 0]))
-
-let myPrintListofOptionDict (dict: Map<int, int> option list): unit =
-    for x in dict do
-        match x with
-        | Some d -> myPrintDict d
-        | None -> printfn "None"
-
-myPrintListofOptionDict [Some (myListToDict [3; 1; 4; 2; 5; 9; 8; 6; 7; 0]); None; Some (myListToDict [3; 1; 4; 2; 5; 9; 8; 6; 7; 0])]
+let tfs = (
+    (stringify__ true "bool") + "\n"
+    + (stringify__ 3 "int") + "\n"
+    + (stringify__ 3.141592653 "double") + "\n"
+    + (stringify__ 3.0 "double") + "\n"
+    + (stringify__ "Hello, World!" "str") + "\n"
+    + (stringify__ "!@#$%^&*()\\\"\n\t" "str") + "\n"
+    + (stringify__ [1; 2; 3] "list<int>") + "\n"
+    + (stringify__ [true; false; true] "list<bool>") + "\n"
+    + (stringify__ [3; 2; 1] "ulist<int>") + "\n"
+    + (stringify__ (Map [1, "one"; 2, "two"]) "dict<int,str>") + "\n"
+    + (stringify__ (Map ["one", [1; 2; 3]; "two", [4; 5; 6]]) "dict<str,list<int>>") + "\n"
+    + (stringify__ None "option<int>") + "\n"
+    + (stringify__ (Some 3) "option<int>") + "\n"
+)
+System.IO.File.WriteAllText("stringify.out", tfs)

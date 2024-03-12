@@ -1,106 +1,142 @@
-use List::Util qw(reduce);
+use builtin qw(true false is_bool);
 use feature qw(signatures);
 
-sub my_string_to_int ($s) {
-    return int($s);
+sub new_poly_eval_type__($type_str, $type_name, $value_type, $key_type) {
+    return {
+        type_str => $type_str,
+        type_name => $type_name,
+        value_type => $value_type,
+        key_type => $key_type
+    };
 }
 
-sub my_string_to_double ($s) {
-    return $s + 0;
-}
-
-sub my_int_to_string ($i) {
-    return "$i";
-}
-
-sub my_double_to_string ($d) {
-    return sprintf("%.6f", $d);
-}
-
-sub my_bool_to_string ($b) {
-    return $b ? "true" : "false";
-}
-
-sub my_int_to_nullable ($i) {
-    if ($i > 0) {
-        return $i;
-    } elsif ($i < 0) {
-        return -$i;
+sub s_to_type__($type_str) {
+    if (index($type_str, "<") == -1) {
+        return new_poly_eval_type__($type_str, $type_str, undef, undef);
     } else {
-        return undef;
+        my $idx = index($type_str, "<");
+        my $type_name = substr($type_str, 0, $idx);
+        my $other_str = substr($type_str, $idx + 1, -1);
+        if (index($other_str, ",") == -1) {
+            my $value_type = s_to_type__(substr($other_str, 0));
+            return new_poly_eval_type__($type_str, $type_name, $value_type, undef);
+        } else {
+            my $idx = index($other_str, ",");
+            my $key_type = s_to_type__(substr($other_str, 0, $idx));
+            my $value_type = s_to_type__(substr($other_str, $idx + 1));
+            return new_poly_eval_type__($type_str, $type_name, $value_type, $key_type);
+        }
     }
 }
 
-sub my_nullable_to_int ($i) {
-    return defined($i) ? $i : -1;
-}
-
-sub my_list_sorted ($lst) {
-    return [sort @$lst];
-}
-
-sub my_list_sorted_by_length ($lst) {
-    return [sort { length($a) <=> length($b) } @$lst];
-}
-
-sub my_list_filter ($lst) {
-    return [grep { $_ % 3 == 0 } @$lst];
-}
-
-sub my_list_map ($lst) {
-    return [map { $_ * $_ } @$lst];
-}
-
-sub my_list_reduce ($lst) {
-    return reduce { $a * 10 + $b } 0, @$lst;
-}
-
-sub my_list_operations ($lst) {
-    return reduce { $a * 10 + $b } 0, 
-        map { $_ * $_ } 
-            grep { $_ % 3 == 0 } @$lst;
-}
-
-sub my_list_to_dict ($lst) {
-    return {map { $_ => $_ * $_ } @$lst};
-}
-
-sub my_dict_to_list ($dict) {
-    return [map { $_ + $dict->{$_} } sort keys %$dict];
-}
-
-sub my_print_string ($s) {
-    print $s . "\n";
-}
-
-sub my_print_string_list ($lst) {
-    for my $x (@$lst) {
-        print $x . " ";
+sub escape_string__($s) {
+    my @new_s = ();
+    for my $c (split //, $s) {
+        if ($c eq "\\") {
+            push @new_s, "\\\\";
+        } elsif ($c eq "\"") {
+            push @new_s, "\\\"";
+        } elsif ($c eq "\n") {
+            push @new_s, "\\n";
+        } elsif ($c eq "\t") {
+            push @new_s, "\\t";
+        } elsif ($c eq "\r") {
+            push @new_s, "\\r";
+        } else {
+            push @new_s, $c;
+        }
     }
-    print "\n";
+    return join "", @new_s;
 }
 
-sub my_print_int_list ($lst) {
-    my_print_string_list([map { my_int_to_string($_) } @$lst]);
+sub by_bool__($value) {
+    return $value ? "true" : "false";
 }
 
-sub my_print_dict ($dict) {
-    while (my ($k, $v) = each %$dict) {
-        print my_int_to_string($k) . "->" . my_int_to_string($v) . " ";
+sub by_int__($value) {
+    return int($value);
+}
+
+sub by_double__($value) {
+    my $v = $value;
+    my $vs = sprintf("%.6f", $v);
+    while ($vs =~ /0$/) {
+        $vs = substr($vs, 0, -1);
     }
-    print "\n";
+    if ($vs =~ /\.$/) {
+        $vs .= "0";
+    }
+    if ($vs eq "-0.0") {
+        $vs = "0.0";
+    }
+    return $vs;
 }
 
-my_print_string("Hello, World!");
-my_print_string(my_int_to_string(my_string_to_int("123")));
-my_print_string(my_double_to_string(my_string_to_double("123.456")));
-my_print_string(my_bool_to_string(0));
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(18))));
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(-15))));
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(0))));
-my_print_string_list(my_list_sorted(["e", "dddd", "ccccc", "bb", "aaa"]));
-my_print_string_list(my_list_sorted_by_length(["e", "dddd", "ccccc", "bb", "aaa"]));
-my_print_string(my_int_to_string(my_list_reduce(my_list_map(my_list_filter([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))));
-my_print_string(my_int_to_string(my_list_operations([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])));
-my_print_dict(my_list_to_dict([3, 1, 4, 2, 5, 9, 8, 6, 7, 0]));
-my_print_int_list(my_dict_to_list({3 => 9, 1 => 1, 4 => 16, 2 => 4, 5 => 25, 9 => 81, 8 => 64, 6 => 36, 7 => 49, 0 => 0}));
+sub by_string__($value) {
+    return '"' . escape_string__($value) . '"';
+}
+
+sub by_list__($value, $ty) {
+    my @v_strs = map { val_to_s__($_, $ty->{value_type}) } @$value;
+    return "[" . join(", ", @v_strs) . "]";
+}
+
+sub by_ulist__($value, $ty) {
+    my @v_strs = map { val_to_s__($_, $ty->{value_type}) } @$value;
+    return "[" . join(", ", sort @v_strs) . "]";
+}
+
+sub by_dict__($value, $ty) {
+    my @v_strs = map { val_to_s__($_, $ty->{key_type}) . "=>" . val_to_s__($value->{$_}, $ty->{value_type}) } keys %$value;
+    return "{" . join(", ", sort @v_strs) . "}";
+}
+
+sub by_option__($value, $ty) {
+    if (!defined $value) {
+        return "null";
+    } else {
+        return val_to_s__($value, $ty->{value_type});
+    }
+}
+
+sub val_to_s__($value, $ty) {
+    my $type_name = $ty->{type_name};
+    if ($type_name eq "bool") {
+        return by_bool__($value);
+    } elsif ($type_name eq "int") {
+        return by_int__($value);
+    } elsif ($type_name eq "double") {
+        return by_double__($value);
+    } elsif ($type_name eq "str") {
+        return by_string__($value);
+    } elsif ($type_name eq "list") {
+        return by_list__($value, $ty);
+    } elsif ($type_name eq "ulist") {
+        return by_ulist__($value, $ty);
+    } elsif ($type_name eq "dict") {
+        return by_dict__($value, $ty);
+    } elsif ($type_name eq "option") {
+        return by_option__($value, $ty);
+    }
+    die "Unknown type $type_name";
+}
+
+sub stringify__($value, $type_str) {
+    return val_to_s__($value, s_to_type__($type_str)) . ":" . $type_str;
+}
+
+my $tfs = stringify__(true, "bool") . "\n" .
+    stringify__(3, "int") . "\n" .
+    stringify__(3.141592653, "double") . "\n" .
+    stringify__(3.0, "double") . "\n" .
+    stringify__("Hello, World!", "str") . "\n" .
+    stringify__("!\@#\$%^&*()\\\"\n\t", "str") . "\n" .
+    stringify__([1, 2, 3], "list<int>") . "\n" .
+    stringify__([1, 0, 1], "list<bool>") . "\n" .
+    stringify__([3, 2, 1], "ulist<int>") . "\n" .
+    stringify__({1 => "one", 2 => "two"}, "dict<int,str>") . "\n" .
+    stringify__({"one" => [1, 2, 3], "two" => [4, 5, 6]}, "dict<str,list<int>>") . "\n" .
+    stringify__(undef, "option<int>") . "\n" .
+    stringify__(3, "option<int>") . "\n";
+open(my $fh, ">", "stringify.out") or die "Could not open file. $!";
+print $fh $tfs;

@@ -1,109 +1,132 @@
+{-# LANGUAGE UndecidableInstances, FlexibleInstances #-}
+
 import Data.List
 import Data.Function 
-import Text.Printf
+import Data.Maybe
 import Data.Map (Map)
+import Text.Printf
 import qualified Data.Map.Strict as Map
 
-myStringToInt :: String -> Int
-myStringToInt s = 
-    read s :: Int
+data PolyEvalType = PolyEvalType { typeStr :: String, typeName :: String, valueType :: Maybe PolyEvalType, keyType :: Maybe PolyEvalType }
 
-myStringToDouble :: String -> Double
-myStringToDouble s = 
-    read s :: Double
+class ValToS__ a where  
+    valToS__ :: a -> PolyEvalType -> String
+    valToS__ _ _ = error "Wrong Type"
 
-myIntToString :: Int -> String
-myIntToString i = 
-    show i
+sToType__ :: String -> PolyEvalType
+sToType__ typeStr = 
+    if "<" `isInfixOf` typeStr then
+        let idx = head $ elemIndices '<' typeStr
+            typeName = take idx typeStr
+            otherStr = take (length typeStr - idx - 2) $ drop (idx + 1) typeStr
+        in if "," `isInfixOf` otherStr then
+            let idx = head $ elemIndices ',' otherStr
+                keyType = sToType__ $ take idx otherStr
+                valueType = sToType__ $ drop (idx + 1) otherStr
+            in PolyEvalType typeStr typeName (Just valueType) (Just keyType)
+        else
+            let valueType = sToType__ otherStr
+            in PolyEvalType typeStr typeName (Just valueType) Nothing
+    else
+        PolyEvalType typeStr typeStr Nothing Nothing
 
-myDoubleToString :: Double -> String
-myDoubleToString d = 
-    printf "%.6f" d
+escapeString__ :: String -> String
+escapeString__ s = 
+    let escapeChar c = case c of
+            '\\' -> "\\\\"
+            '\"' -> "\\\""
+            '\n' -> "\\n"
+            '\t' -> "\\t"
+            '\r' -> "\\r"
+            _ -> [c]
+    in concatMap escapeChar s
 
-myBoolToString :: Bool -> String
-myBoolToString b = 
-    if b then "true" else "false"
+byBool__ :: Bool -> String
+byBool__ value = 
+    if value then "true" else "false"
 
-myIntToNullable :: Int -> Maybe Int
-myIntToNullable i = 
-    if i > 0 then Just i else if i < 0 then Just (-i) else Nothing
+byInt__ :: Int -> String
+byInt__ value = 
+    show value
 
-myNullableToInt :: Maybe Int -> Int
-myNullableToInt i = 
-    case i of
-        Just x -> x
-        Nothing -> -1
+byDouble__ :: Double -> String
+byDouble__ value = 
+    let vs = printf "%.6f" value
+    in if isSuffixOf "0" vs then
+        let vs' = reverse $ dropWhile (== '0') $ reverse vs
+        in if isSuffixOf "." vs' then vs' ++ "0" else vs'
+    else if vs == "-0.0" then "0.0" else vs
 
-myListSorted :: [String] -> [String]
-myListSorted lst = 
-    sort lst
+byString__ :: String -> String
+byString__ value = 
+    "\"" ++ escapeString__ value ++ "\""
 
-myListSortedByLength :: [String] -> [String]
-myListSortedByLength lst = 
-    sortBy (compare `on` length) lst
+byList__ :: (ValToS__ a) => [a] -> PolyEvalType -> String
+byList__ value ty =
+    let vStrs = value & map (\v -> valToS__ v (fromJust $ valueType ty)) 
+    in "[" ++ intercalate ", " vStrs ++ "]"
 
-myListFilter :: [Int] -> [Int]
-myListFilter lst = 
-    filter (\x -> x `mod` 3 == 0) lst
+byUList__ :: (ValToS__ a) => [a] -> PolyEvalType -> String
+byUList__ value ty = 
+    let vStrs = value & map (\v -> valToS__ v (fromJust $ valueType ty)) 
+    in "[" ++ intercalate ", " (sort vStrs) ++ "]"
 
-myListMap :: [Int] -> [Int]
-myListMap lst = 
-    map (\x -> x * x) lst
+byDict__ :: (ValToS__ a, ValToS__ b) => (Map a b) -> PolyEvalType -> String
+byDict__ value ty = 
+    let vStrs = Map.toList value & map (\(key, val) -> (valToS__ key (fromJust $ keyType ty)) ++ "=>" ++ (valToS__ val (fromJust $ valueType ty)))
+    in "{" ++ intercalate ", " (sort vStrs) ++ "}"
 
-myListReduce :: [Int] -> Int
-myListReduce lst = 
-    foldl' (\acc x -> acc * 10 + x) 0 lst
+byOption__ :: (ValToS__ a) => Maybe a -> PolyEvalType -> String
+byOption__ value ty = 
+    if isNothing value then "null" else valToS__ (fromJust value) (fromJust $ valueType ty) 
 
-myListOperations :: [Int] -> Int
-myListOperations lst = 
-    lst & filter (\x -> x `mod` 3 == 0)
-        & map (\x -> x * x)
-        & foldl' (\acc x -> acc * 10 + x) 0
+instance ValToS__ Bool where
+    valToS__ value ty = 
+        if (typeName ty) == "bool" then byBool__ value else error "Type mismatch"
 
-myListToDict :: [Int] -> Map Int Int
-myListToDict lst = 
-    lst & map (\x -> (x, x * x))
-        & Map.fromList
+instance ValToS__ Int where
+    valToS__ value ty = 
+        if (typeName ty) == "int" then byInt__ value else error "Type mismatch"
 
-myDictToList :: Map Int Int -> [Int]
-myDictToList dict = 
-    dict & Map.toList
-        & sortBy (compare `on` fst)
-        & map (\(k, v) -> k + v)
+instance ValToS__ Double where
+    valToS__ value ty = 
+        if (typeName ty) == "double" then byDouble__ value else error "Type mismatch"
 
-myPrintString :: String -> IO ()
-myPrintString s = 
-    putStrLn s
+instance {-# OVERLAPPING #-} ValToS__ String where
+    valToS__ value ty = 
+        if (typeName ty) == "str" then byString__ value else error "Type mismatch"
 
-myPrintStringList :: [String] -> IO ()
-myPrintStringList lst = 
-    lst & foldr (\x acc -> 
-        putStr (x ++ " ") >> acc) 
-        (putStrLn "")
+instance (ValToS__ a) => ValToS__ [a] where
+    valToS__ value ty = 
+        if (typeName ty) == "list" then byList__ value ty 
+        else if (typeName ty) == "ulist" then byUList__ value ty 
+        else error "Type mismatch"
 
-myPrintIntList :: [Int] -> IO ()
-myPrintIntList lst = 
-    myPrintStringList (map myIntToString lst)
+instance (ValToS__ a, ValToS__ b) => ValToS__ (Map a b) where
+    valToS__ value ty = 
+        if (typeName ty) == "dict" then byDict__ value ty else error "Type mismatch"
 
-myPrintDict :: Map Int Int -> IO ()
-myPrintDict dict = 
-    dict & Map.toList
-        & foldr (\(k, v) acc -> 
-        putStr (myIntToString k ++ "->" ++ myIntToString v ++ " ") >> acc) 
-        (putStrLn "")
+instance (ValToS__ a) => ValToS__ (Maybe a) where
+    valToS__ value ty = 
+        if (typeName ty) == "option" then byOption__ value ty else error "Type mismatch"
+
+stringify__ :: (ValToS__ a) => a -> String -> String
+stringify__ value typeStr = 
+    valToS__ value (sToType__ typeStr) ++ ":" ++ typeStr
 
 main :: IO ()
-main = 
-    myPrintString "Hello, World!"
-    myPrintString (myIntToString (myStringToInt "123"))
-    myPrintString (myDoubleToString (myStringToDouble "123.456"))
-    myPrintString (myBoolToString False)
-    myPrintString (myIntToString (myNullableToInt (myIntToNullable 18)))
-    myPrintString (myIntToString (myNullableToInt (myIntToNullable (-15))))
-    myPrintString (myIntToString (myNullableToInt (myIntToNullable 0)))
-    myPrintStringList (myListSorted ["e", "dddd", "ccccc", "bb", "aaa"])
-    myPrintStringList (myListSortedByLength ["e", "dddd", "ccccc", "bb", "aaa"])
-    myPrintString (myIntToString (myListReduce (myListMap (myListFilter [3, 12, 5, 8, 9, 15, 7, 17, 21, 11]))))
-    myPrintString (myIntToString (myListOperations [3, 12, 5, 8, 9, 15, 7, 17, 21, 11]))
-    myPrintDict (myListToDict [3, 1, 4, 2, 5, 9, 8, 6, 7, 0])
-    myPrintIntList (myDictToList (Map.fromList [(3, 9), (1, 1), (4, 16), (2, 4), (5, 25), (9, 81), (8, 64), (6, 36), (7, 49), (0, 0)]))
+main = do
+    let tfs = stringify__ True "bool" ++ "\n" 
+            ++ stringify__ (3 :: Int) "int" ++ "\n" 
+            ++ stringify__ (3.141592653 :: Double) "double" ++ "\n" 
+            ++ stringify__ (3.0 :: Double) "double" ++ "\n" 
+            ++ stringify__ "Hello, World!" "str" ++ "\n" 
+            ++ stringify__ "!@#$%^&*()\\\"\n\t" "str" ++ "\n" 
+            ++ stringify__ [1 :: Int, 2 :: Int, 3 :: Int] "list<int>" ++ "\n" 
+            ++ stringify__ [True, False, True] "list<bool>" ++ "\n" 
+            ++ stringify__ [3 :: Int, 2 :: Int, 1 :: Int] "ulist<int>" ++ "\n" 
+            ++ stringify__ (Map.fromList [(1 :: Int, "one"), (2 :: Int, "two")]) "dict<int,str>" ++ "\n" 
+            ++ stringify__ (Map.fromList [("one", [1 :: Int, 2 :: Int, 3 :: Int]), ("two", [4 :: Int, 5 :: Int, 6 :: Int])]) "dict<str,list<int>>" ++ "\n" 
+            ++ stringify__ (Nothing :: Maybe Bool) "option<int>" ++ "\n" 
+            ++ stringify__ (Just (3 :: Int)) "option<int>" ++ "\n"
+    writeFile "stringify.out" tfs

@@ -1,89 +1,130 @@
 -module(example).
 -export([main/0]).
+-record(poly_eval_type, {type_str, type_name, value_type, key_type}).
 
-my_string_to_int(S) -> 
-    list_to_integer(S).
+new_poly_eval_type__(TypeStr, TypeName, ValueType, KeyType) ->
+    #poly_eval_type{type_str=TypeStr, type_name=TypeName, value_type=ValueType, key_type=KeyType}.
 
-my_string_to_double(S) ->
-    list_to_float(S).
-
-my_int_to_string(I) ->
-    integer_to_list(I).
-
-my_double_to_string(D) ->
-    lists:flatten(io_lib:format("~.6f", [D])).
-
-my_bool_to_string(B) ->
-    if B -> "true"; true -> "false" end.
-
-my_int_to_nullable(I) ->
-    if
-        I > 0 -> I;
-        I < 0 -> -I;
-        true -> undefined
+s_to_type__(TypeStr) ->
+    case string:str(TypeStr, "<") of
+        0 -> new_poly_eval_type__(TypeStr, TypeStr, undefined, undefined);
+        Idx ->
+            TypeName = string:substr(TypeStr, 1, Idx - 1),
+            OtherStr = string:substr(TypeStr, Idx + 1, length(TypeStr) - Idx - 1),
+            case string:str(OtherStr, ",") of
+                0 ->
+                    ValueType = s_to_type__(OtherStr),
+                    new_poly_eval_type__(TypeStr, TypeName, ValueType, undefined);
+                Idx2 ->
+                    KeyType = s_to_type__(string:substr(OtherStr, 1, Idx2 - 1)),
+                    ValueType = s_to_type__(string:substr(OtherStr, Idx2 + 1, length(OtherStr) - Idx2)),
+                    new_poly_eval_type__(TypeStr, TypeName, ValueType, KeyType)
+            end
     end.
 
-my_nullable_to_int(I) ->
-    case I of
-        undefined -> -1;
-        X -> X
+escape_string__(S) ->
+    NewS = lists:map(fun(C) ->
+        case C of
+            $\\ -> "\\\\";
+            $\" -> "\\\"";
+            $\n -> "\\n";
+            $\t -> "\\t";
+            $\r -> "\\r";
+            _ -> [C]
+        end
+    end, S),
+    string:join(NewS, "").
+
+by_bool__(Value) ->
+    case Value of
+        true -> "true";
+        false -> "false"
     end.
 
-my_list_sorted(Lst) ->
-    lists:sort(Lst).
+by_int__(Value) ->
+    integer_to_list(Value).
 
-my_list_sorted_by_length(Lst) ->
-    lists:sort(fun(A, B) -> length(A) < length(B) end, Lst).
+by_double__(Value) ->
+    Vs = lists:flatten(io_lib:format("~.6f", [Value])),
+    Vs2 = re:replace(Vs, "0+$", "", [{return, list}]),
+    Vs3 = re:replace(Vs2, "\\.$", ".0", [{return, list}]),
+    case Vs3 of
+        "-0.0" -> "0.0";
+        _ -> Vs3
+    end.
 
-my_list_filter(Lst) ->
-    lists:filter(fun(X) -> X rem 3 =:= 0 end, Lst).
+by_string__(Value) ->
+    "\"" ++ escape_string__(Value) ++ "\"".
 
-my_list_map(Lst) ->
-    lists:map(fun(X) -> X * X end, Lst).
+by_list__(Value, Ty) ->
+    VStrs = lists:map(fun(V) -> val_to_s__(V, Ty#poly_eval_type.value_type) end, Value),
+    "[" ++ string:join(VStrs, ", ") ++ "]".
 
-my_list_reduce(Lst) ->
-    lists:foldl(fun(X, Acc) -> Acc * 10 + X end, 0, Lst).
+by_ulist__(Value, Ty) ->
+    VStrs = lists:map(fun(V) -> val_to_s__(V, Ty#poly_eval_type.value_type) end, Value),
+    "[" ++ string:join(lists:sort(VStrs), ", ") ++ "]".
 
-my_list_operations(Lst) ->
-    lists:foldl(fun(X, Acc) -> Acc * 10 + X end, 0, 
-        lists:map(fun(X) -> X * X end, 
-            lists:filter(fun(X) -> X rem 3 =:= 0 end, Lst))).
+by_dict__(Value, Ty) ->
+    VStrs = lists:map(fun({Key, Val}) -> val_to_s__(Key, Ty#poly_eval_type.key_type) ++ "=>" ++ val_to_s__(Val, Ty#poly_eval_type.value_type) end, maps:to_list(Value)),
+    "{" ++ string:join(lists:sort(VStrs), ", ") ++ "}".
 
-my_list_to_dict(Lst) ->
-    dict:from_list(lists:map(fun(X) -> {X, X * X} end, Lst)).
+by_option__(Value, Ty) ->
+    case Value of
+        undefined -> "null";
+        _ -> val_to_s__(Value, Ty#poly_eval_type.value_type)
+    end.
 
-my_dict_to_list(Dict) ->
-    lists:map(fun({K, V}) -> K + V end, lists:sort(fun({A, _}, {B, _}) -> A < B end, dict:to_list(Dict))).
+val_to_s__(Value, Ty) ->
+    TypeName = Ty#poly_eval_type.type_name,
+    case TypeName of
+        "bool" -> case Value of
+            true -> by_bool__(Value);
+            false -> by_bool__(Value);
+            _ -> erlang:error("Type mismatch")
+        end;
+        "int" -> case Value of
+            _ when is_integer(Value) -> by_int__(Value);
+            _ -> erlang:error("Type mismatch")
+        end;
+        "double" -> case Value of
+            _ when is_float(Value) -> by_double__(Value);
+            _ -> erlang:error("Type mismatch")
+        end;
+        "str" -> case Value of
+            _ when is_list(Value) -> by_string__(Value);
+            _ -> erlang:error("Type mismatch")
+        end;
+        "list" -> case Value of
+            _ when is_list(Value) -> by_list__(Value, Ty);
+            _ -> erlang:error("Type mismatch")
+        end;
+        "ulist" -> case Value of
+            _ when is_list(Value) -> by_ulist__(Value, Ty);
+            _ -> erlang:error("Type mismatch")
+        end;
+        "dict" -> case Value of
+            _ when is_map(Value) -> by_dict__(Value, Ty);
+            _ -> erlang:error("Type mismatch")
+        end;
+        "option" -> by_option__(Value, Ty);
+        _ -> erlang:error("Unknown type " ++ TypeName)
+    end.
 
-my_print_string(S) ->
-    io:format("~s~n", [S]).
-
-my_print_string_list(Lst) ->
-    lists:foreach(fun(X) -> 
-        io:format("~s ", [X]) 
-    end, Lst),
-    io:format("~n").
-
-my_print_int_list(Lst) ->
-    my_print_string_list(lists:map(fun(X) -> my_int_to_string(X) end, Lst)).
-
-my_print_dict(Dict) ->
-    lists:foreach(fun({K, V}) -> 
-        io:format("~s->~s ", [my_int_to_string(K), my_int_to_string(V)]) 
-    end, dict:to_list(Dict)),
-    io:format("~n").
+stringify__(Value, TypeStr) ->
+    val_to_s__(Value, s_to_type__(TypeStr)) ++ ":" ++ TypeStr.
 
 main() ->
-    my_print_string("Hello, World!"),
-    my_print_string(my_int_to_string(my_string_to_int("123"))),
-    my_print_string(my_double_to_string(my_string_to_double("123.456"))),
-    my_print_string(my_bool_to_string(false)),
-    my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(18)))),
-    my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(-15)))),
-    my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(0)))),
-    my_print_string_list(my_list_sorted(["e", "dddd", "ccccc", "bb", "aaa"])),
-    my_print_string_list(my_list_sorted_by_length(["e", "dddd", "ccccc", "bb", "aaa"])),
-    my_print_string(my_int_to_string(my_list_reduce(my_list_map(my_list_filter([3, 12, 5, 8, 9, 15, 7, 17, 21, 11]))))),
-    my_print_string(my_int_to_string(my_list_operations([3, 12, 5, 8, 9, 15, 7, 17, 21, 11]))),
-    my_print_dict(my_list_to_dict([3, 1, 4, 2, 5, 9, 8, 6, 7, 0])),
-    my_print_int_list(my_dict_to_list(dict:from_list([{3, 9}, {1, 1}, {4, 16}, {2, 4}, {5, 25}, {9, 81}, {8, 64}, {6, 36}, {7, 49}, {0, 0}]))).
+    Tfs = stringify__(true, "bool") ++ "\n"
+        ++ stringify__(3, "int") ++ "\n"
+        ++ stringify__(3.141592653, "double") ++ "\n"
+        ++ stringify__(3.0, "double") ++ "\n"
+        ++ stringify__("Hello, World!", "str") ++ "\n"
+        ++ stringify__("!@#$%^&*()\\\"\n\t", "str") ++ "\n"
+        ++ stringify__([1, 2, 3], "list<int>") ++ "\n"
+        ++ stringify__([true, false, true], "list<bool>") ++ "\n"
+        ++ stringify__([3, 2, 1], "ulist<int>") ++ "\n"
+        ++ stringify__(#{1 => "one", 2 => "two"}, "dict<int,str>") ++ "\n"
+        ++ stringify__(#{"one" => [1, 2, 3], "two" => [4, 5, 6]}, "dict<str,list<int>>") ++ "\n"
+        ++ stringify__(undefined, "option<int>") ++ "\n"
+        ++ stringify__(3, "option<int>") ++ "\n",
+    file:write_file("stringify.out", Tfs).

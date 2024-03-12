@@ -1,108 +1,161 @@
 using Printf
 
-# Rewrite the commented function with type annotation
-
-function my_string_to_int(s::String)::Int
-    parse(Int, s)
+struct PolyEvalType
+    type_str::String
+    type_name::String
+    value_type::Union{PolyEvalType, Missing}
+    key_type::Union{PolyEvalType, Missing}
 end
 
-function my_string_to_double(s::String)::Float64
-    parse(Float64, s)
-end
-
-function my_int_to_string(i::Int)::String
-    string(i)
-end
-
-function my_double_to_string(d::Float64)::String
-    @sprintf("%.6f", d)
-end
-
-function my_bool_to_string(b::Bool)::String
-    b ? "true" : "false"
-end
-
-function my_int_to_nullable(i::Int)::Union{Int, Missing}
-    if i > 0
-        return i
-    elseif i < 0
-        return -i
+function s_to_type__(type_str::String)::PolyEvalType
+    if !occursin("<", type_str)
+        return PolyEvalType(type_str, type_str, missing, missing)
     else
-        return missing
+        idx = findfirst("<", type_str).start
+        type_name = type_str[1:idx - 1]
+        other_str = type_str[idx + 1:end - 1]
+        if !occursin(",", other_str)
+            value_type = s_to_type__(other_str)
+            return PolyEvalType(type_str, type_name, value_type, missing)
+        else
+            idx = findfirst(",", other_str).start
+            key_type = s_to_type__(other_str[1:idx - 1])
+            value_type = s_to_type__(other_str[idx + 1:end])
+            return PolyEvalType(type_str, type_name, value_type, key_type)
+        end
     end
 end
 
-function my_nullable_to_int(i::Union{Int, Missing})::Int
-    coalesce(i, -1)
-end
-
-
-function my_list_sorted(lst::Vector{String})::Vector{String}
-    sort(lst)
-end
-
-function my_list_sorted_by_length(lst::Vector{String})::Vector{String}
-    sort(lst, by = x -> length(x))
-end
-
-function my_list_filter(lst::Vector{Int})::Vector{Int}
-    filter(x -> x % 3 == 0, lst)
-end
-
-function my_list_map(lst::Vector{Int})::Vector{Int}
-    map(x -> x * x, lst)
-end
-
-function my_list_reduce(lst::Vector{Int})::Int
-    reduce((acc, x) -> acc * 10 + x, lst, init = 0)
-end
-
-function my_list_operations(lst::Vector{Int})::Int
-    lst |> l -> filter(x -> x % 3 == 0, l) |> 
-        l -> map(x -> x * x, l) |> 
-        l -> reduce((acc, x) -> acc * 10 + x, l, init = 0)
-end
-
-function my_list_to_dict(lst::Vector{Int})::Dict{Int, Int}
-    Dict(x => x * x for x in lst)
-end
-
-function my_dict_to_list(dict::Dict{Int, Int})::Vector{Int}
-    dict |> collect |> sort |> l -> map(x -> x[1] + x[2], l)
-end
-
-function my_print_string(s::String)::Nothing
-    println(s)
-end
-
-function my_print_string_list(lst::Vector{String})::Nothing
-    for x in lst
-        print(x, " ")
+function escape_string__(s::String)::String
+    new_s = ""
+    for c in s
+        if c == '\\'
+            new_s *= "\\\\"
+        elseif c == '"'
+            new_s *= "\\\""
+        elseif c == '\n'
+            new_s *= "\\n"
+        elseif c == '\t'
+            new_s *= "\\t"
+        elseif c == '\r'
+            new_s *= "\\r"
+        else
+            new_s *= c
+        end
     end
-    println()
+    return new_s
 end
 
-function my_print_int_list(lst::Vector{Int})::Nothing
-    my_print_string_list(map(my_int_to_string, lst))
+function by_bool__(value::Bool)::String
+    return value ? "true" : "false"
 end
 
-function my_print_dict(dict::Dict{Int, Int})::Nothing
-    for (k, v) in dict
-        print(my_int_to_string(k) * "->" * my_int_to_string(v) * " ")
+function by_int__(value::Int)::String
+    return string(value)
+end
+
+function by_double__(value::Float64)::String
+    vs = @sprintf("%.6f", value)
+    while endswith(vs, "0")
+        vs = vs[1:end-1]
     end
-    println()
+    if endswith(vs, ".")
+        vs *= "0"
+    end
+    if vs == "-0.0"
+        vs = "0.0"
+    end
+    return vs
 end
 
-my_print_string("Hello, World!")
-my_print_string(my_int_to_string(my_string_to_int("123")))
-my_print_string(my_double_to_string(my_string_to_double("123.456")))
-my_print_string(my_bool_to_string(false))
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(18))))
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(-15))))
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(0))))
-my_print_string_list(my_list_sorted(["e", "dddd", "ccccc", "bb", "aaa"]))
-my_print_string_list(my_list_sorted_by_length(["e", "dddd", "ccccc", "bb", "aaa"]))
-my_print_string(my_int_to_string(my_list_reduce(my_list_map(my_list_filter([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))))
-my_print_string(my_int_to_string(my_list_operations([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))
-my_print_dict(my_list_to_dict([3, 1, 4, 2, 5, 9, 8, 6, 7, 0]))
-my_print_int_list(my_dict_to_list(Dict(3 => 9, 1 => 1, 4 => 16, 2 => 4, 5 => 25, 9 => 81, 8 => 64, 6 => 36, 7 => 49, 0 => 0)))
+function by_string__(value::String)::String
+    return '"' * escape_string__(value) * '"'
+end
+
+function by_list__(value::Vector, ty::PolyEvalType)::String
+    v_strs = [val_to_s__(v, ty.value_type) for v in value]
+    return "[" * join(v_strs, ", ") * "]"
+end
+
+function by_ulist__(value::Vector, ty::PolyEvalType)::String
+    v_strs = [val_to_s__(v, ty.value_type) for v in value]
+    return "[" * join(sort(v_strs), ", ") * "]"
+end
+
+function by_dict__(value::Dict, ty::PolyEvalType)::String
+    v_strs = [val_to_s__(key, ty.key_type) * "=>" * val_to_s__(val, ty.value_type) for (key, val) in value]
+    return "{" * join(sort(v_strs), ", ") * "}"
+end
+
+function by_option__(value, ty::PolyEvalType)::String
+    if ismissing(value)
+        return "null"
+    else
+        return val_to_s__(value, ty.value_type)
+    end
+end
+
+function val_to_s__(value, ty::PolyEvalType)::String
+    type_name = ty.type_name
+    if type_name == "bool"
+        if !isa(value, Bool)
+            throw(ArgumentError("Type mismatch"))
+        end
+        return by_bool__(value)
+    elseif type_name == "int"
+        if !isa(value, Int)
+            throw(ArgumentError("Type mismatch"))
+        end
+        return by_int__(value)
+    elseif type_name == "double"
+        if !isa(value, Float64)
+            throw(ArgumentError("Type mismatch"))
+        end
+        return by_double__(value)
+    elseif type_name == "str"
+        if !isa(value, String)
+            throw(ArgumentError("Type mismatch"))
+        end
+        return by_string__(value)
+    elseif type_name == "list"
+        if !isa(value, Vector)
+            throw(ArgumentError("Type mismatch"))
+        end
+        return by_list__(value, ty)
+    elseif type_name == "ulist"
+        if !isa(value, Vector)
+            throw(ArgumentError("Type mismatch"))
+        end
+        return by_ulist__(value, ty)
+    elseif type_name == "dict"
+        if !isa(value, Dict)
+            throw(ArgumentError("Type mismatch"))
+        end
+        return by_dict__(value, ty)
+    elseif type_name == "option"
+        return by_option__(value, ty)
+    end
+    throw(ArgumentError("Unknown type $type_name"))
+end
+
+function stringify__(value, type_str::String)::String
+    return val_to_s__(value, s_to_type__(type_str)) * ":" * type_str
+end
+
+tfs = stringify__(true, "bool") * "\n" *
+    stringify__(3, "int") * "\n" *
+    stringify__(3.141592653, "double") * "\n" *
+    stringify__(3.0, "double") * "\n" *
+    stringify__("Hello, World!", "str") * "\n" *
+    stringify__("!@#\$%^&*()\\\"\n\t", "str") * "\n" *
+    stringify__([1, 2, 3], "list<int>") * "\n" *
+    stringify__([true, false, true], "list<bool>") * "\n" *
+    stringify__([3, 2, 1], "ulist<int>") * "\n" *
+    stringify__(Dict(1 => "one", 2 => "two"), "dict<int,str>") * "\n" *
+    stringify__(Dict("one" => [1, 2, 3], "two" => [4, 5, 6]), "dict<str,list<int>>") * "\n" *
+    stringify__(missing, "option<int>") * "\n" *
+    stringify__(3, "option<int>") * "\n"
+
+open("stringify.out", "w") do f
+    write(f, tfs)
+end

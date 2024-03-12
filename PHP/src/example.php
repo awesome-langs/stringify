@@ -1,112 +1,174 @@
 <?php
 
-function my_string_to_int($s) {
-    return intval($s);
+class PolyEvalType {
+    public $type_str;
+    public $type_name;
+    public $value_type;
+    public $key_type;
+
+    public function __construct($type_str, $type_name, $value_type, $key_type) {
+        $this->type_str = $type_str;
+        $this->type_name = $type_name;
+        $this->value_type = $value_type;
+        $this->key_type = $key_type;
+    }
 }
 
-function my_string_to_double($s) {
-    return floatval($s);
-}
-
-function my_int_to_string($i) {
-    return strval($i);
-}
-
-function my_double_to_string($d) {
-    return number_format($d, 6);
-}
-
-function my_bool_to_string($b) {
-    return $b ? "true" : "false";
-}
-
-function my_int_to_nullable($i) {
-    if ($i > 0) {
-        return $i;
-    } else if ($i < 0) {
-        return -$i;
+function s_to_type__($type_str) {
+    if (strpos($type_str, "<") === false) {
+        return new PolyEvalType($type_str, $type_str, null, null);
     } else {
-        return null;
+        $idx = strpos($type_str, "<");
+        $type_name = substr($type_str, 0, $idx);
+        $other_str = substr($type_str, $idx + 1, -1);
+        if (strpos($other_str, ",") === false) {
+            $value_type = s_to_type__($other_str);
+            return new PolyEvalType($type_str, $type_name, $value_type, null);
+        } else {
+            $idx = strpos($other_str, ",");
+            $key_type = s_to_type__(substr($other_str, 0, $idx));
+            $value_type = s_to_type__(substr($other_str, $idx + 1));
+            return new PolyEvalType($type_str, $type_name, $value_type, $key_type);
+        }
     }
 }
 
-function my_nullable_to_int($i) {
-    return $i ?? -1;
-}
-
-function my_list_sorted($lst) {
-    $tmp = $lst;
-    sort($tmp);
-    return $tmp;
-}
-
-function my_list_sorted_by_length($lst) {
-    $tmp = $lst;
-    usort($tmp, fn ($a, $b) => strlen($a) - strlen($b));
-    return $tmp;
-}
-
-function my_list_filter($lst) {
-    return array_filter($lst, fn ($x) => $x % 3 == 0);
-}
-
-function my_list_map($lst) {
-    return array_map(fn ($x) => $x * $x, $lst);
-}
-
-function my_list_reduce($lst) {
-    return array_reduce($lst, fn ($acc, $x) => $acc * 10 + $x, 0);
-}
-
-function my_list_operations($lst) {
-    return array_reduce(
-        array_map(fn ($x) => $x * $x, 
-            array_filter($lst, fn ($x) => $x % 3 == 0)),
-        fn ($acc, $x) => $acc * 10 + $x, 0);
-}
-
-function my_list_to_dict($lst) {
-    return array_combine($lst, array_map(fn ($x) => $x * $x, $lst));
-}
-
-function my_dict_to_list($dict) {
-    $tmp = $dict;
-    ksort($tmp);
-    return array_map(fn ($k, $v) => $k + $v, array_keys($tmp), $tmp);
-}
-
-function my_print_string($s) {
-    echo $s . "\n";
-}
-
-function my_print_string_list($lst) {
-    foreach ($lst as $x) {
-        echo $x . " ";
+function escape_string__($s) {
+    $new_s = [];
+    foreach (str_split($s) as $c) {
+        if ($c === "\\") {
+            $new_s[] = "\\\\";
+        } elseif ($c === "\"") {
+            $new_s[] = "\\\"";
+        } elseif ($c === "\n") {
+            $new_s[] = "\\n";
+        } elseif ($c === "\t") {
+            $new_s[] = "\\t";
+        } elseif ($c === "\r") {
+            $new_s[] = "\\r";
+        } else {
+            $new_s[] = $c;
+        }
     }
-    echo "\n";
+    return implode("", $new_s);
 }
 
-function my_print_int_list($lst) {
-    my_print_string_list(array_map(fn ($x) => my_int_to_string($x), $lst));
+function by_bool__($value) {
+    return $value ? "true" : "false";
 }
 
-function my_print_dict($dict) {
-    foreach ($dict as $k => $v) {
-        echo my_int_to_string($k) . "->" . my_int_to_string($v) . " ";
+function by_int__($value) {
+    return strval($value);
+}
+
+function by_double__($value) {
+    $v = floatval($value);
+    $vs = number_format($v, 6, ".", "");
+    while (substr($vs, -1) === "0") {
+        $vs = substr($vs, 0, -1);
     }
-    echo "\n";
+    if (substr($vs, -1) === ".") {
+        $vs .= "0";
+    }
+    if ($vs === "-0.0") {
+        $vs = "0.0";
+    }
+    return $vs;
 }
 
-my_print_string("Hello, World!");
-my_print_string(my_int_to_string(my_string_to_int("123")));
-my_print_string(my_double_to_string(my_string_to_double("123.456")));
-my_print_string(my_bool_to_string(false));
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(18))));
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(-15))));
-my_print_string(my_int_to_string(my_nullable_to_int(my_int_to_nullable(0))));
-my_print_string_list(my_list_sorted(["e", "dddd", "ccccc", "bb", "aaa"]));
-my_print_string_list(my_list_sorted_by_length(["e", "dddd", "ccccc", "bb", "aaa"]));
-my_print_string(my_int_to_string(my_list_reduce(my_list_map(my_list_filter([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])))));
-my_print_string(my_int_to_string(my_list_operations([3, 12, 5, 8, 9, 15, 7, 17, 21, 11])));
-my_print_dict(my_list_to_dict([3, 1, 4, 2, 5, 9, 8, 6, 7, 0]));
-my_print_int_list(my_dict_to_list([3 => 9, 1 => 1, 4 => 16, 2 => 4, 5 => 25, 9 => 81, 8 => 64, 6 => 36, 7 => 49, 0 => 0]));
+function by_string__($value) {
+    return '"' . escape_string__($value) . '"';
+}
+
+function by_list__($value, $ty) {
+    $v_strs = array_map(function($v) use ($ty) {
+        return val_to_s__($v, $ty->value_type);
+    }, $value);
+    return "[" . implode(", ", $v_strs) . "]";
+}
+
+function by_ulist__($value, $ty) {
+    $v_strs = array_map(function($v) use ($ty) {
+        return val_to_s__($v, $ty->value_type);
+    }, $value);
+    sort($v_strs);
+    return "[" . implode(", ", $v_strs) . "]";
+}
+
+function by_dict__($value, $ty) {
+    $v_strs = array_map(function($key, $val) use ($ty) {
+        return val_to_s__($key, $ty->key_type) . "=>" . val_to_s__($val, $ty->value_type);
+    }, array_keys($value), $value);
+    sort($v_strs);
+    return "{" . implode(", ", $v_strs) . "}";
+}
+
+function by_option__($value, $ty) {
+    if ($value === null) {
+        return "null";
+    } else {
+        return val_to_s__($value, $ty->value_type);
+    }
+}
+
+function val_to_s__($value, $ty) {
+    $type_name = $ty->type_name;
+    if ($type_name === "bool") {
+        if (!is_bool($value)) {
+            throw new Exception("Type mismatch");
+        }
+        return by_bool__($value);
+    } elseif ($type_name === "int") {
+        if (!is_int($value) && !(is_float($value) && is_int($value))) {
+            throw new Exception("Type mismatch");
+        }
+        return by_int__($value);
+    } elseif ($type_name === "double") {
+        if (!is_int($value) && !is_float($value)) {
+            throw new Exception("Type mismatch");
+        }
+        return by_double__($value);
+    } elseif ($type_name === "str") {
+        if (!is_string($value)) {
+            throw new Exception("Type mismatch");
+        }
+        return by_string__($value);
+    } elseif ($type_name === "list") {
+        if (!is_array($value)) {
+            throw new Exception("Type mismatch");
+        }
+        return by_list__($value, $ty);
+    } elseif ($type_name === "ulist") {
+        if (!is_array($value)) {
+            throw new Exception("Type mismatch");
+        }
+        return by_ulist__($value, $ty);
+    } elseif ($type_name === "dict") {
+        if (!is_array($value)) {
+            throw new Exception("Type mismatch");
+        }
+        return by_dict__($value, $ty);
+    } elseif ($type_name === "option") {
+        return by_option__($value, $ty);
+    }
+    throw new Exception("Unknown type " . $type_name);
+}
+
+function stringify__($value, $type_str) {
+    return val_to_s__($value, s_to_type__($type_str)) . ":" . $type_str;
+}
+
+$tfs = stringify__(true, "bool") . "\n" .
+    stringify__(3, "int") . "\n" .
+    stringify__(3.141592653, "double") . "\n" .
+    stringify__(3.0, "double") . "\n" .
+    stringify__("Hello, World!", "str") . "\n" .
+    stringify__("!@#$%^&*()\\\"\n\t", "str") . "\n" .
+    stringify__([1, 2, 3], "list<int>") . "\n" .
+    stringify__([true, false, true], "list<bool>") . "\n" .
+    stringify__([3, 2, 1], "ulist<int>") . "\n" .
+    stringify__([1 => "one", 2 => "two"], "dict<int,str>") . "\n" .
+    stringify__(["one" => [1, 2, 3], "two" => [4, 5, 6]], "dict<str,list<int>>") . "\n" .
+    stringify__(null, "option<int>") . "\n" .
+    stringify__(3, "option<int>") . "\n";
+file_put_contents("stringify.out", $tfs);
